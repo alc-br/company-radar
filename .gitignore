@@ -52,3 +52,18 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Company Core backend (separate repo)
+company-core/
+
+# Internal tool dirs
+tool-results/
+upload/
+.zscripts/
+scripts/
+tests/
+db/
+mini-services/
+download/
+*.db
+*.db-journal
