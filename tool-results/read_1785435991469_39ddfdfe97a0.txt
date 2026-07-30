@@ -1,0 +1,838 @@
+     1→"""Views de template para o módulo de Tarefas do Company Radar.
+     2→
+     3→Views baseadas em funções com @login_required, seguindo o padrão do projeto."""
+     4→
+     5→import json
+     6→import logging
+     7→from django import forms
+     8→from django.contrib import messages
+     9→from django.contrib.auth.decorators import login_required
+    10→from django.http import JsonResponse
+    11→from django.shortcuts import render, redirect
+    12→from django.views.decorators.http import require_POST
+    13→from django.utils import timezone
+    14→
+    15→from apps.radar_tasks.models import (
+    16→    Task,
+    17→    TaskAssignment,
+    18→    TaskDependency,
+    19→    ChecklistItem,
+    20→    TaskComment,
+    21→    TaskFollower,
+    22→    TaskStatus,
+    23→    ChecklistStatus,
+    24→    TaskOrigin,
+    25→    TaskPriority,
+    26→)
+    27→from apps.radar_tasks.services import TaskService
+    28→from apps.radar_tasks.selectors import TaskSelectors
+    29→from apps.clients.models import ClientCompany, Department
+    30→from apps.common.exceptions import ServiceException
+    31→
+    32→logger = logging.getLogger(__name__)
+    33→
+    34→
+    35→# ─── Formulários ─────────────────────────────────────────────────────
+    36→
+    37→
+    38→class TaskForm(forms.ModelForm):
+    39→    """Formulário para criação/edição de tarefas avulsas."""
+    40→
+    41→    class Meta:
+    42→        model = Task
+    43→        fields = [
+    44→            'title', 'description', 'client', 'department', 'category',
+    45→            'priority', 'due_date', 'estimated_duration',
+    46→            'is_visible_in_portal', 'portal_instructions', 'team_instructions',
+    47→            'internal_notes',
+    48→        ]
+    49→        widgets = {
+    50→            'title': forms.TextInput(attrs={'class': 'form-control'}),
+    51→            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+    52→            'client': forms.Select(attrs={'class': 'form-control'}),
+    53→            'department': forms.Select(attrs={'class': 'form-control'}),
+    54→            'category': forms.TextInput(attrs={'class': 'form-control'}),
+    55→            'priority': forms.Select(attrs={'class': 'form-control'}),
+    56→            'due_date': forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
+    57→            'estimated_duration': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+    58→            'is_visible_in_portal': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+    59→            'portal_instructions': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+    60→            'team_instructions': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+    61→            'internal_notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+    62→        }
+    63→
+    64→    def __init__(self, *args, **kwargs):
+    65→        org = kwargs.pop('organization', None)
+    66→        super().__init__(*args, **kwargs)
+    67→        if org:
+    68→            self.fields['client'].queryset = ClientCompany.objects.filter(
+    69→                organization=org, is_deleted=False,
+    70→            ).order_by('razao_social')
+    71→            self.fields['department'].queryset = Department.objects.filter(
+    72→                organization=org, is_active=True,
+    73→            ).order_by('name')
+    74→
+    75→
+    76→class TaskCommentForm(forms.ModelForm):
+    77→    """Formulário para adicionar comentário em tarefa."""
+    78→
+    79→    class Meta:
+    80→        model = TaskComment
+    81→        fields = ['body']
+    82→        widgets = {
+    83→            'body': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Escreva seu comentário...'}),
+    84→        }
+    85→
+    86→
+    87→class ChecklistItemForm(forms.Form):
+    88→    """Formulário simples para adicionar item de checklist."""
+    89→    title = forms.CharField(
+    90→        label='Título',
+    91→        max_length=500,
+    92→        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Novo item...'}),
+    93→    )
+    94→    description = forms.CharField(
+    95→        label='Descrição',
+    96→        required=False,
+    97→        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+    98→    )
+    99→    is_required = forms.BooleanField(
+   100→        label='Obrigatório',
+   101→        initial=True,
+   102→        required=False,
+   103→        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+   104→    )
+   105→
+   106→
+   107→class BulkStatusForm(forms.Form):
+   108→    """Formulário para alteração em massa de status."""
+   109→    task_ids = forms.CharField(widget=forms.HiddenInput())
+   110→    new_status = forms.IntegerField(
+   111→        label='Novo Status',
+   112→        widget=forms.Select(choices=TaskStatus.choices),
+   113→    )
+   114→
+   115→
+   116→class TaskAssignmentForm(forms.Form):
+   117→    """Formulário para atribuir usuário a tarefa."""
+   118→    user_id = forms.IntegerField(
+   119→        label='Usuário',
+   120→        widget=forms.Select(attrs={'class': 'form-control'}),
+   121→    )
+   122→    role = forms.CharField(
+   123→        label='Papel',
+   124→        initial='responsavel',
+   125→        widget=forms.Select(choices=[
+   126→            ('responsavel', 'Responsável'),
+   127→            ('colaborador', 'Colaborador'),
+   128→            ('revisor', 'Revisor'),
+   129→            ('observador', 'Observador'),
+   130→        ]),
+   131→    )
+   132→
+   133→    def __init__(self, *args, **kwargs):
+   134→        org = kwargs.pop('organization', None)
+   135→        super().__init__(*args, **kwargs)
+   136→        if org:
+   137→            from apps.users.models import CustomUser
+   138→            from apps.organizations.models import Membership
+   139→            member_ids = Membership.objects.filter(
+   140→                organization=org, status=1,
+   141→            ).values_list('user_id', flat=True)
+   142→            self.fields['user_id'].widget = forms.Select(
+   143→                choices=[('', 'Selecione...')] + list(
+   144→                    CustomUser.objects.filter(id__in=member_ids)
+   145→                    .values_list('id', lambda u: f"{u.first_name} {u.last_name}")
+   146→                ),
+   147→                attrs={'class': 'form-control'},
+   148→            )
+   149→
+   150→
+   151→class TaskDependencyForm(forms.Form):
+   152→    """Formulário para adicionar dependência entre tarefas."""
+   153→    source_task_id = forms.UUIDField(
+   154→        label='Tarefa que bloqueia',
+   155→        widget=forms.Select(attrs={'class': 'form-control'}),
+   156→    )
+   157→
+   158→    def __init__(self, *args, **kwargs):
+   159→        org = kwargs.pop('organization', None)
+   160→        current_task = kwargs.pop('current_task', None)
+   161→        super().__init__(*args, **kwargs)
+   162→        if org and current_task:
+   163→            tarefas = Task.objects.filter(
+   164→                organization=org,
+   165→                is_deleted=False,
+   166→            ).exclude(id=current_task.id)
+   167→            self.fields['source_task_id'].widget = forms.Select(
+   168→                choices=[('', 'Selecione...')] + list(
+   169→                    tarefas.values_list('uuid', 'title')
+   170→                ),
+   171→                attrs={'class': 'form-control'},
+   172→            )
+   173→
+   174→
+   175→class UpdateDueDateForm(forms.Form):
+   176→    """Formulário para alterar prazo."""
+   177→    new_due_date = forms.DateTimeField(
+   178→        label='Novo Prazo',
+   179→        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
+   180→    )
+   181→    reason = forms.CharField(
+   182→        label='Motivo',
+   183→        required=False,
+   184→        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Motivo da alteração (obrigatório se vencida)'}),
+   185→    )
+   186→
+   187→
+   188→class ReopenCancelForm(forms.Form):
+   189→    """Formulário para reabrir ou cancelar tarefa."""
+   190→    reason = forms.CharField(
+   191→        label='Motivo',
+   192→        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Informe o motivo...'}),
+   193→    )
+   194→
+   195→
+   196→# ─── Views ───────────────────────────────────────────────────────────
+   197→
+   198→
+   199→def _get_org(request):
+   200→    """Helper para obter a organização do tenant."""
+   201→    return getattr(request, 'tenant', None)
+   202→
+   203→
+   204→def _org_redirect(request):
+   205→    """Redireciona para seleção de organização."""
+   206→    messages.error(request, 'Organização não selecionada.')
+   207→    return redirect('organizations:list')
+   208→
+   209→
+   210→@login_required
+   211→def task_list(request):
+   212→    """Lista de tarefas com filtros, busca e paginação.
+   213→
+   214→    Suporta visualização em tabela e ações em massa.
+   215→    """
+   216→    org = _get_org(request)
+   217→    if not org:
+   218→        return _org_redirect(request)
+   219→
+   220→    # Parâmetros de filtro
+   221→    status_filter = request.GET.get('status')
+   222→    client_id = request.GET.get('client')
+   223→    department_id = request.GET.get('department')
+   224→    responsible_id = request.GET.get('responsible')
+   225→    priority_filter = request.GET.get('priority')
+   226→    search_term = request.GET.get('q', '')
+   227→    due_before = request.GET.get('due_before')
+   228→    due_after = request.GET.get('due_after')
+   229→    origin_filter = request.GET.get('origin')
+   230→    ordering = request.GET.get('ordering', 'due_date')
+   231→    page = int(request.GET.get('page', 1))
+   232→    page_size = int(request.GET.get('page_size', 20))
+   233→
+   234→    resultado = TaskSelectors.get_task_list(
+   235→        org=org,
+   236→        status=status_filter,
+   237→        client_id=client_id,
+   238→        department_id=department_id,
+   239→        responsible_id=responsible_id,
+   240→        priority=priority_filter,
+   241→        search=search_term,
+   242→        due_before=due_before,
+   243→        due_after=due_after,
+   244→        origin=origin_filter,
+   245→        ordering=ordering,
+   246→        page=page,
+   247→        page_size=page_size,
+   248→    )
+   249→
+   250→    # Dados para filtros no template
+   251→    clientes = ClientCompany.objects.filter(
+   252→        organization=org, is_deleted=False,
+   253→    ).order_by('razao_social')
+   254→    departamentos = Department.objects.filter(
+   255→        organization=org, is_active=True,
+   256→    ).order_by('name')
+   257→
+   258→    context = {
+   259→        'tasks': resultado['results'],
+   260→        'page': resultado['page'],
+   261→        'page_size': resultado['page_size'],
+   262→        'total_pages': resultado['total_pages'],
+   263→        'total_count': resultado['total_count'],
+   264→        'has_next': resultado['has_next'],
+   265→        'has_previous': resultado['has_previous'],
+   266→        'status_choices': TaskStatus.choices,
+   267→        'priority_choices': TaskPriority.choices,
+   268→        'origin_choices': TaskOrigin.choices,
+   269→        'clientes': clientes,
+   270→        'departamentos': departamentos,
+   271→        'filtros': {
+   272→            'status': status_filter,
+   273→            'q': search_term,
+   274→            'client': client_id,
+   275→            'department': department_id,
+   276→            'responsible': responsible_id,
+   277→            'priority': priority_filter,
+   278→            'due_before': due_before,
+   279→            'due_after': due_after,
+   280→            'origin': origin_filter,
+   281→            'ordering': ordering,
+   282→        },
+   283→    }
+   284→    return render(request, 'radar_tasks/task_list.html', context)
+   285→
+   286→
+   287→@login_required
+   288→def task_detail(request, uuid):
+   289→    """Detalhe completo de uma tarefa com abas:
+   290→
+   291→    - Geral (info + atribuições)
+   292→    - Checklist
+   293→    - Documentos
+   294→    - Comentários
+   295→    - Dependências
+   296→    - Histórico
+   297→    """
+   298→    org = _get_org(request)
+   299→    if not org:
+   300→        return _org_redirect(request)
+   301→
+   302→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   303→    if not task:
+   304→        messages.error(request, 'Tarefa não encontrada.')
+   305→        return redirect('radar_tasks:task_list')
+   306→
+   307→    # Dependências
+   308→    deps = TaskSelectors.get_task_dependencies(task)
+   309→
+   310→    # Contagens por status para filtro lateral
+   311→    contagem_status = TaskSelectors.count_tasks_by_status(org)
+   312→
+   313→    # Formulários para ações inline
+   314→    comment_form = TaskCommentForm()
+   315→    checklist_form = ChecklistItemForm()
+   316→    assignment_form = TaskAssignmentForm(organization=org)
+   317→    dependency_form = TaskDependencyForm(organization=org, current_task=task)
+   318→    due_date_form = UpdateDueDateForm()
+   319→    reopen_cancel_form = ReopenCancelForm()
+   320→
+   321→    context = {
+   322→        'task': task,
+   323→        'deps': deps,
+   324→        'contagem_status': contagem_status,
+   325→        'status_choices': dict(TaskStatus.choices),
+   326→        'priority_choices': dict(TaskPriority.choices),
+   327→        'comment_form': comment_form,
+   328→        'checklist_form': checklist_form,
+   329→        'assignment_form': assignment_form,
+   330→        'dependency_form': dependency_form,
+   331→        'due_date_form': due_date_form,
+   332→        'reopen_cancel_form': reopen_cancel_form,
+   333→        'active_tab': request.GET.get('tab', 'geral'),
+   334→    }
+   335→    return render(request, 'radar_tasks/task_detail.html', context)
+   336→
+   337→
+   338→@login_required
+   339→def task_create(request):
+   340→    """Formulário para criação de tarefa avulsa."""
+   341→    org = _get_org(request)
+   342→    if not org:
+   343→        return _org_redirect(request)
+   344→
+   345→    if request.method == 'POST':
+   346→        form = TaskForm(request.POST, organization=org)
+   347→        if form.is_valid():
+   348→            try:
+   349→                dados = form.cleaned_data.copy()
+   350→                dados.pop('client', None)
+   351→                dados.pop('department', None)
+   352→                dados['client'] = form.cleaned_data.get('client')
+   353→                dados['department'] = form.cleaned_data.get('department')
+   354→
+   355→                tarefa = TaskService.create_task_avulsa(org, request.user, **dados)
+   356→                messages.success(request, f'Tarefa "{tarefa.title}" criada com sucesso!')
+   357→                return redirect('radar_tasks:task_detail', uuid=tarefa.uuid)
+   358→            except ServiceException as exc:
+   359→                messages.error(request, str(exc))
+   360→            except Exception as exc:
+   361→                messages.error(request, f'Erro ao criar tarefa: {exc}')
+   362→    else:
+   363→        form = TaskForm(organization=org)
+   364→
+   365→    context = {'form': form, 'action': 'create'}
+   366→    return render(request, 'radar_tasks/task_form.html', context)
+   367→
+   368→
+   369→@login_required
+   370→def task_edit(request, uuid):
+   371→    """Formulário para edição de tarefa."""
+   372→    org = _get_org(request)
+   373→    if not org:
+   374→        return _org_redirect(request)
+   375→
+   376→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   377→    if not task:
+   378→        messages.error(request, 'Tarefa não encontrada.')
+   379→        return redirect('radar_tasks:task_list')
+   380→
+   381→    if request.method == 'POST':
+   382→        form = TaskForm(request.POST, instance=task, organization=org)
+   383→        if form.is_valid():
+   384→            try:
+   385→                campos_editaveis = [
+   386→                    'title', 'description', 'client', 'department',
+   387→                    'category', 'priority', 'due_date', 'estimated_duration',
+   388→                    'is_visible_in_portal', 'portal_instructions',
+   389→                    'team_instructions', 'internal_notes',
+   390→                ]
+   391→                for campo in campos_editaveis:
+   392→                    if campo in form.cleaned_data:
+   393→                        setattr(task, campo, form.cleaned_data[campo])
+   394→                task.full_clean()
+   395→                task.save()
+   396→
+   397→                from apps.audit.services import AuditService
+   398→                AuditService.log(
+   399→                    action='task.updated',
+   400→                    target_type='task',
+   401→                    target_id=task.uuid,
+   402→                    actor=request.user,
+   403→                    organization=org,
+   404→                    metadata={'title': task.title},
+   405→                )
+   406→
+   407→                messages.success(request, f'Tarefa "{task.title}" atualizada com sucesso!')
+   408→                return redirect('radar_tasks:task_detail', uuid=task.uuid)
+   409→            except Exception as exc:
+   410→                messages.error(request, f'Erro ao atualizar: {exc}')
+   411→    else:
+   412→        form = TaskForm(instance=task, organization=org)
+   413→
+   414→    context = {'form': form, 'object': task, 'action': 'edit'}
+   415→    return render(request, 'radar_tasks/task_form.html', context)
+   416→
+   417→
+   418→@login_required
+   419→def task_board(request):
+   420→    """Visualização Kanban agrupada por status."""
+   421→    org = _get_org(request)
+   422→    if not org:
+   423→        return _org_redirect(request)
+   424→
+   425→    client_id = request.GET.get('client')
+   426→    department_id = request.GET.get('department')
+   427→
+   428→    tarefas = TaskSelectors.get_tasks_for_board(
+   429→        org,
+   430→        client_id=client_id,
+   431→        department_id=department_id,
+   432→    )
+   433→
+   434→    # Agrupar por status
+   435→    colunas = {}
+   436→    for status_val, status_label in TaskStatus.choices:
+   437→        colunas[status_val] = {
+   438→            'label': status_label,
+   439→            'value': status_val,
+   440→            'tasks': [],
+   441→        }
+   442→
+   443→    for tarefa in tarefas:
+   444→        if tarefa.status in colunas:
+   445→            colunas[tarefa.status]['tasks'].append(tarefa)
+   446→
+   447→    clientes = ClientCompany.objects.filter(
+   448→        organization=org, is_deleted=False,
+   449→    ).order_by('razao_social')
+   450→    departamentos = Department.objects.filter(
+   451→        organization=org, is_active=True,
+   452→    ).order_by('name')
+   453→
+   454→    context = {
+   455→        'colunas': colunas,
+   456→        'clientes': clientes,
+   457→        'departamentos': departamentos,
+   458→        'filtros': {'client': client_id, 'department': department_id},
+   459→    }
+   460→    return render(request, 'radar_tasks/task_board.html', context)
+   461→
+   462→
+   463→# ─── Ações inline (POST) ─────────────────────────────────────────────
+   464→
+   465→
+   466→@login_required
+   467→@require_POST
+   468→def task_start(request, uuid):
+   469→    """Inicia uma tarefa."""
+   470→    org = _get_org(request)
+   471→    if not org:
+   472→        return _org_redirect(request)
+   473→
+   474→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   475→    if not task:
+   476→        messages.error(request, 'Tarefa não encontrada.')
+   477→        return redirect('radar_tasks:task_list')
+   478→
+   479→    try:
+   480→        TaskService.start_task(task, request.user)
+   481→        messages.success(request, 'Tarefa iniciada com sucesso!')
+   482→    except ServiceException as exc:
+   483→        messages.error(request, str(exc))
+   484→
+   485→    return redirect('radar_tasks:task_detail', uuid=uuid)
+   486→
+   487→
+   488→@login_required
+   489→@require_POST
+   490→def task_complete(request, uuid):
+   491→    """Conclui uma tarefa."""
+   492→    org = _get_org(request)
+   493→    if not org:
+   494→        return _org_redirect(request)
+   495→
+   496→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   497→    if not task:
+   498→        messages.error(request, 'Tarefa não encontrada.')
+   499→        return redirect('radar_tasks:task_list')
+   500→
+   501→    evidence = request.POST.get('evidence', '')
+   502→    try:
+   503→        TaskService.complete_task(task, request.user, evidence=evidence or None)
+   504→        messages.success(request, 'Tarefa concluída com sucesso!')
+   505→    except ServiceException as exc:
+   506→        messages.error(request, str(exc))
+   507→
+   508→    return redirect('radar_tasks:task_detail', uuid=uuid)
+   509→
+   510→
+   511→@login_required
+   512→@require_POST
+   513→def task_reopen(request, uuid):
+   514→    """Reabre uma tarefa concluída."""
+   515→    org = _get_org(request)
+   516→    if not org:
+   517→        return _org_redirect(request)
+   518→
+   519→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   520→    if not task:
+   521→        messages.error(request, 'Tarefa não encontrada.')
+   522→        return redirect('radar_tasks:task_list')
+   523→
+   524→    reason = request.POST.get('reason', '')
+   525→    try:
+   526→        TaskService.reopen_task(task, request.user, reason)
+   527→        messages.success(request, 'Tarefa reaberta com sucesso!')
+   528→    except ServiceException as exc:
+   529→        messages.error(request, str(exc))
+   530→
+   531→    return redirect('radar_tasks:task_detail', uuid=uuid)
+   532→
+   533→
+   534→@login_required
+   535→@require_POST
+   536→def task_cancel(request, uuid):
+   537→    """Cancela uma tarefa."""
+   538→    org = _get_org(request)
+   539→    if not org:
+   540→        return _org_redirect(request)
+   541→
+   542→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   543→    if not task:
+   544→        messages.error(request, 'Tarefa não encontrada.')
+   545→        return redirect('radar_tasks:task_list')
+   546→
+   547→    reason = request.POST.get('reason', '')
+   548→    try:
+   549→        TaskService.cancel_task(task, request.user, reason)
+   550→        messages.success(request, 'Tarefa cancelada com sucesso!')
+   551→    except ServiceException as exc:
+   552→        messages.error(request, str(exc))
+   553→
+   554→    return redirect('radar_tasks:task_detail', uuid=uuid)
+   555→
+   556→
+   557→@login_required
+   558→@require_POST
+   559→def task_update_due_date(request, uuid):
+   560→    """Atualiza o prazo de uma tarefa."""
+   561→    org = _get_org(request)
+   562→    if not org:
+   563→        return _org_redirect(request)
+   564→
+   565→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   566→    if not task:
+   567→        messages.error(request, 'Tarefa não encontrada.')
+   568→        return redirect('radar_tasks:task_list')
+   569→
+   570→    form = UpdateDueDateForm(request.POST)
+   571→    if form.is_valid():
+   572→        try:
+   573→            TaskService.update_due_date(
+   574→                task, request.user,
+   575→                new_date=form.cleaned_data['new_due_date'],
+   576→                reason=form.cleaned_data.get('reason', ''),
+   577→            )
+   578→            messages.success(request, 'Prazo atualizado com sucesso!')
+   579→        except ServiceException as exc:
+   580→            messages.error(request, str(exc))
+   581→
+   582→    return redirect('radar_tasks:task_detail', uuid=uuid)
+   583→
+   584→
+   585→@login_required
+   586→@require_POST
+   587→def task_assign(request, uuid):
+   588→    """Atribui um usuário a uma tarefa."""
+   589→    org = _get_org(request)
+   590→    if not org:
+   591→        return _org_redirect(request)
+   592→
+   593→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   594→    if not task:
+   595→        messages.error(request, 'Tarefa não encontrada.')
+   596→        return redirect('radar_tasks:task_list')
+   597→
+   598→    form = TaskAssignmentForm(request.POST, organization=org)
+   599→    if form.is_valid():
+   600→        try:
+   601→            TaskService.assign_task(
+   602→                task,
+   603→                user_id=form.cleaned_data['user_id'],
+   604→                assigned_by=request.user,
+   605→                role=form.cleaned_data['role'],
+   606→            )
+   607→            messages.success(request, 'Usuário atribuído com sucesso!')
+   608→        except ServiceException as exc:
+   609→            messages.error(request, str(exc))
+   610→
+   611→    return redirect('radar_tasks:task_detail', uuid=uuid)
+   612→
+   613→
+   614→@login_required
+   615→@require_POST
+   616→def task_remove_assignment(request, uuid, assignment_id):
+   617→    """Remove uma atribuição de usuário."""
+   618→    org = _get_org(request)
+   619→    if not org:
+   620→        return _org_redirect(request)
+   621→
+   622→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   623→    if not task:
+   624→        messages.error(request, 'Tarefa não encontrada.')
+   625→        return redirect('radar_tasks:task_list')
+   626→
+   627→    try:
+   628→        assignment = TaskAssignment.objects.get(id=assignment_id, task=task, organization=org)
+   629→        TaskService.remove_assignment(task, assignment.user_id, request.user)
+   630→        messages.success(request, 'Atribuição removida com sucesso!')
+   631→    except TaskAssignment.DoesNotExist:
+   632→        messages.error(request, 'Atribuição não encontrada.')
+   633→    except ServiceException as exc:
+   634→        messages.error(request, str(exc))
+   635→
+   636→    return redirect('radar_tasks:task_detail', uuid=uuid)
+   637→
+   638→
+   639→@login_required
+   640→@require_POST
+   641→def task_add_comment(request, uuid):
+   642→    """Adiciona um comentário a uma tarefa."""
+   643→    org = _get_org(request)
+   644→    if not org:
+   645→        return _org_redirect(request)
+   646→
+   647→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   648→    if not task:
+   649→        messages.error(request, 'Tarefa não encontrada.')
+   650→        return redirect('radar_tasks:task_list')
+   651→
+   652→    form = TaskCommentForm(request.POST)
+   653→    if form.is_valid():
+   654→        is_internal = request.POST.get('is_internal', 'off') == 'on'
+   655→        try:
+   656→            TaskService.add_comment(
+   657→                task, request.user,
+   658→                body=form.cleaned_data['body'],
+   659→                is_internal=is_internal,
+   660→            )
+   661→            messages.success(request, 'Comentário adicionado!')
+   662→        except ServiceException as exc:
+   663→            messages.error(request, str(exc))
+   664→
+   665→    return redirect('radar_tasks:task_detail', uuid=uuid)
+   666→
+   667→
+   668→@login_required
+   669→@require_POST
+   670→def task_toggle_follower(request, uuid):
+   671→    """Adiciona ou remove o usuário atual como seguidor."""
+   672→    org = _get_org(request)
+   673→    if not org:
+   674→        return _org_redirect(request)
+   675→
+   676→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   677→    if not task:
+   678→        messages.error(request, 'Tarefa não encontrada.')
+   679→        return redirect('radar_tasks:task_list')
+   680→
+   681→    if TaskFollower.objects.filter(task=task, user=request.user, organization=org).exists():
+   682→        TaskService.remove_follower(task, request.user)
+   683→        messages.success(request, 'Você deixou de seguir esta tarefa.')
+   684→    else:
+   685→        TaskService.add_follower(task, request.user)
+   686→        messages.success(request, 'Você agora acompanha esta tarefa.')
+   687→
+   688→    return redirect('radar_tasks:task_detail', uuid=uuid)
+   689→
+   690→
+   691→@login_required
+   692→@require_POST
+   693→def task_add_checklist_item(request, uuid):
+   694→    """Adiciona um item de checklist a uma tarefa."""
+   695→    org = _get_org(request)
+   696→    if not org:
+   697→        return _org_redirect(request)
+   698→
+   699→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   700→    if not task:
+   701→        messages.error(request, 'Tarefa não encontrada.')
+   702→        return redirect('radar_tasks:task_list')
+   703→
+   704→    form = ChecklistItemForm(request.POST)
+   705→    if form.is_valid():
+   706→        total = task.checklist_items.count()
+   707→        item = ChecklistItem(
+   708→            organization=org,
+   709→            task=task,
+   710→            title=form.cleaned_data['title'],
+   711→            description=form.cleaned_data.get('description', ''),
+   712→            is_required=form.cleaned_data.get('is_required', True),
+   713→            display_order=total,
+   714→        )
+   715→        item.save()
+   716→        messages.success(request, 'Item adicionado ao checklist!')
+   717→
+   718→    return redirect('radar_tasks:task_detail', uuid=uuid + '?tab=checklist')
+   719→
+   720→
+   721→@login_required
+   722→@require_POST
+   723→def task_toggle_checklist_item(request, uuid, item_id):
+   724→    """ Alterna o status de um item de checklist."""
+   725→    org = _get_org(request)
+   726→    if not org:
+   727→        return _org_redirect(request)
+   728→
+   729→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   730→    if not task:
+   731→        messages.error(request, 'Tarefa não encontrada.')
+   732→        return redirect('radar_tasks:task_list')
+   733→
+   734→    try:
+   735→        item = ChecklistItem.objects.get(id=item_id, task=task, organization=org)
+   736→        TaskService.toggle_checklist_item(item, request.user)
+   737→    except ChecklistItem.DoesNotExist:
+   738→        messages.error(request, 'Item não encontrado.')
+   739→
+   740→    return redirect('radar_tasks:task_detail', uuid=uuid + '?tab=checklist')
+   741→
+   742→
+   743→@login_required
+   744→@require_POST
+   745→def task_add_dependency(request, uuid):
+   746→    """Adiciona uma dependência a uma tarefa."""
+   747→    org = _get_org(request)
+   748→    if not org:
+   749→        return _org_redirect(request)
+   750→
+   751→    task = TaskSelectors.get_task_by_uuid(uuid, org)
+   752→    if not task:
+   753→        messages.error(request, 'Tarefa não encontrada.')
+   754→        return redirect('radar_tasks:task_list')
+   755→
+   756→    form = TaskDependencyForm(request.POST, organization=org, current_task=task)
+   757→    if form.is_valid():
+   758→        try:
+   759→            source_uuid = form.cleaned_data['source_task_id']
+   760→            source_task = Task.objects.get(uuid=source_uuid, organization=org, is_deleted=False)
+   761→            dep, created = TaskDependency.objects.get_or_create(
+   762→                source_task=source_task,
+   763→                target_task=task,
+   764→                organization=org,
+   765→            )
+   766→            if created:
+   767→                messages.success(request, 'Dependência adicionada!')
+   768→            else:
+   769→                messages.info(request, 'Esta dependência já existe.')
+   770→        except Task.DoesNotExist:
+   771→            messages.error(request, 'Tarefa bloqueadora não encontrada.')
+   772→        except Exception as exc:
+   773→            messages.error(request, str(exc))
+   774→
+   775→    return redirect('radar_tasks:task_detail', uuid=uuid + '?tab=deps')
+   776→
+   777→
+   778→@login_required
+   779→@require_POST
+   780→def task_remove_dependency(request, uuid, dep_id):
+   781→    """Remove uma dependência."""
+   782→    org = _get_org(request)
+   783→    if not org:
+   784→        return _org_redirect(request)
+   785→
+   786→    try:
+   787→        dep = TaskDependency.objects.get(id=dep_id, organization=org)
+   788→        dep.delete()
+   789→        messages.success(request, 'Dependência removida!')
+   790→    except TaskDependency.DoesNotExist:
+   791→        messages.error(request, 'Dependência não encontrada.')
+   792→
+   793→    return redirect('radar_tasks:task_detail', uuid=uuid + '?tab=deps')
+   794→
+   795→
+   796→@login_required
+   797→@require_POST
+   798→def task_bulk_status(request):
+   799→    """Altera o status de múltiplas tarefas em massa."""
+   800→    org = _get_org(request)
+   801→    if not org:
+   802→        return _org_redirect(request)
+   803→
+   804→    task_ids_str = request.POST.get('task_ids', '')
+   805→    new_status = request.POST.get('new_status')
+   806→
+   807→    if not task_ids_str or not new_status:
+   808→        messages.error(request, 'Selecione tarefas e o novo status.')
+   809→        return redirect('radar_tasks:task_list')
+   810→
+   811→    try:
+   812→        task_ids = json.loads(task_ids_str)
+   813→        new_status_val = int(new_status)
+   814→    except (json.JSONDecodeError, ValueError):
+   815→        messages.error(request, 'Dados inválidos.')
+   816→        return redirect('radar_tasks:task_list')
+   817→
+   818→    resultados = TaskService.bulk_update_status(
+   819→        task_ids=task_ids,
+   820→        user=request.user,
+   821→        new_status=new_status_val,
+   822→        organization=org,
+   823→    )
+   824→
+   825→    if resultados['erros']:
+   826→        messages.warning(
+   827→            request,
+   828→            f"{len(resultados['sucesso'])} tarefa(s) atualizada(s), "
+   829→            f"{len(resultados['erros'])} erro(s).",
+   830→        )
+   831→    else:
+   832→        messages.success(
+   833→            request,
+   834→            f"{len(resultados['sucesso'])} tarefa(s) atualizada(s) com sucesso!",
+   835→        )
+   836→
+   837→    return redirect('radar_tasks:task_list')
+   838→

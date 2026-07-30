@@ -1,0 +1,1117 @@
+     1→# Company Core — Arquitetura Técnica
+     2→
+     3→> **Versão**: 1.0.0
+     4→> **Data**: 2026-07-28
+     5→> **Autor**: Staff+ Software Architect
+     6→> **Status**: Aprovado para implementação
+     7→
+     8→---
+     9→
+    10→## 1. Visão Geral da Arquitetura
+    11→
+    12→A arquitetura do Company Core segue o princípio de **camadas concêntricas**, onde cada camada tem uma responsabilidade bem definida e depende apenas das camadas inferiores. A plataforma é construída sobre o SaaS Pegasus, que atua como a fundação, e o Company Core atua como uma camada de infraestrutura compartilhada que habilita a criação rápida de novos produtos SaaS.
+    13→
+    14→O modelo de três camadas garante que cada novo produto SaaS precise conter apenas sua lógica de domínio específica, enquanto toda a infraestrutura comum (autenticação, billing, IA, multi-tenancy, etc.) permanece centralizada e reutilizável no Company Core.
+    15→
+    16→```
+    17→┌─────────────────────────────────────────────────────────────────┐
+    18→│                    CAMADA DE PRODUTO                            │
+    19→│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
+    20→│  │ Video KG │ │ AI SEO   │ │ AI CRM   │ │ Legal AI │  ...      │
+    21→│  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
+    22→│                      apps/<product_name>/                       │
+    23→├─────────────────────────────────────────────────────────────────┤
+    24→│                 CAMADA COMPANY CORE                             │
+    25→│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐              │
+    26→│  │ Billing  │ │   AI    │ │  Auth   │ │ Storage  │              │
+    27→│  │ Quotas   │ │ Agents  │ │ Orgs    │ │ Webhooks │              │
+    28→│  │ Audit    │ │ Workflo │ │ Perms   │ │ API      │              │
+    29→│  │ Analytics│ │ Notif.  │ │ Search  │ │ Health   │              │
+    30→│  └─────────┘ └─────────┘ └─────────┘ └─────────┘              │
+    31→│                    apps/<core_module>/                           │
+    32→├─────────────────────────────────────────────────────────────────┤
+    33→│               CAMADA SAAS PEGASUS                              │
+    34→│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐      │
+    35→│  │ Django │ │ allauth│ │ Celery │ │  DRF   │ │Waffle  │      │
+    36→│  │ ORM    │ │ Auth   │ │ Tasks  │ │OpenAPI │ │FFlags  │      │
+    37→│  │ HTMX   │ │Tailwind│ │ Docker │ │  Vite  │ │  CI    │      │
+    38→│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘      │
+    39→│              SaaS Pegasus Foundation                           │
+    40→└─────────────────────────────────────────────────────────────────┘
+    41→```
+    42→
+    43→### Princípios Arquiteturais
+    44→
+    45→1. **Reutilização máxima**: Nunca substituir funcionalidades do Pegasus quando existir um mecanismo oficial de extensão.
+    46→2. **Desacoplamento**: Cada app Django é totalmente independente e plugável.
+    47→3. **Extensibilidade**: Todo módulo é projetado para ser estendido sem modificação.
+    48→4. **Isolamento de inquilinos**: Garantia de isolamento absoluto de dados entre tenants (multi-tenancy).
+    49→5. **Clean Architecture**: Separação clara entre domínio, infraestrutura e apresentação.
+    50→
+    51→---
+    52→
+    53→## 2. Arquitetura de Camadas
+    54→
+    55→### 2.1 Camada 0 — Fundação SaaS Pegasus
+    56→
+    57→Esta camada fornece a fundação técnica sobre a qual todo o sistema é construído. Nenhuma modificação é permitida nesta camada; toda integração ocorre por meio de mecanismos oficiais de extensão (INSTALLED_APPS, settings overrides, herança de templates, signals).
+    58→
+    59→**Componentes fornecidos:**
+    60→- **Django 6 + Python 3.14**: Framework web, ORM, sistema de migrações
+    61→- **allauth**: Autenticação (email-as-username, magic links, captcha)
+    62→- **Celery + Redis**: Processamento assíncrono com agendamento
+    63→- **DRF + drf-spectacular**: API REST com documentação OpenAPI
+    64→- **django-waffle**: Feature flags por usuário e por time
+    65→- **HTMX + Alpine.js + Tailwind v4 + DaisyUI**: Frontend server-rendered
+    66→- **Docker (Postgres 17 + Redis)**: Infraestrutura de desenvolvimento
+    67→- **GitHub Actions CI/CD**: Pipeline de integração contínua
+    68→- **ruff + mypy**: Linting e type checking
+    69→- **CustomUser(AbstractUser)**: Modelo de usuário base
+    70→- **BaseModel**: Modelo abstrato com timestamps
+    71→
+    72→### 2.2 Camada 1 — Infraestrutura Compartilhada (Company Core)
+    73→
+    74→Contém todos os módulos de infraestrutura que são compartilhados entre produtos. Esta camada é o coração do Company Core e implementa toda a lógica transversal que qualquer produto SaaS precisaria.
+    75→
+    76→**Módulos agrupados por domínio:**
+    77→
+    78→| Domínio | Módulos | Responsabilidade |
+    79→|---------|---------|-----------------|
+    80→| Identidade | organizations, permissions, settings | Multi-tenancy, RBAC, configurações dinâmicas |
+    81→| Monetização | billing, quotas, feature_flags | Stripe, assinaturas, limites, funcionalidades |
+    82→| Inteligência | ai, agents | Abstração IA, framework de agentes |
+    83→| Comunicação | notifications, webhooks, integrations | Email, Slack, Discord, webhooks universais |
+    84→| Observabilidade | audit, analytics, usage | Rastreio, métricas, consumo |
+    85→| Processamento | workflows, jobs | Motor de workflows, filas Celery |
+    86→| Infraestrutura | storage, api, sdk, health, search | S3, REST, SDK interno, health checks |
+    87→| Fundação | common, core | Utilitários, configurações base |
+    88→
+    89→### 2.3 Camada 2 — Produto (Extensão)
+    90→
+    91→Cada produto SaaS é um app Django independente que:
+    92→- Herda toda infraestrutura do Company Core
+    93→- Contém apenas lógica de domínio específica
+    94→- Se registra via INSTALLED_APPS
+    95→- Usa services/selectors compartilhados
+    96→- Configura seus próprios models, views e templates
+    97→
+    98→---
+    99→
+   100→## 3. Padrões Arquiteturais
+   101→
+   102→### 3.1 Service Layer Pattern
+   103→
+   104→Toda lógica de negócio reside em classes de serviço. Views nunca contêm regra de negócio; Models nunca contêm lógica pesada. Services são a camada que orquestra operações de domínio.
+   105→
+   106→```python
+   107→# apps/billing/services.py
+   108→
+   109→from typing import Optional
+   110→from django.db import transaction
+   111→from apps.billing.models import Subscription, Plan
+   112→from apps.organizations.selectors import get_organization_by_id
+   113→from apps.audit.services import create_audit_log
+   114→
+   115→
+   116→class BillingService:
+   117→    """Serviço responsável por operações de billing."""
+   118→
+   119→    @staticmethod
+   120→    @transaction.atomic
+   121→    def create_subscription(
+   122→        organization_id: int,
+   123→        plan_id: str,
+   124→        stripe_customer_id: str,
+   125→    ) -> Subscription:
+   126→        """Cria uma nova assinatura para uma organização."""
+   127→        organization = get_organization_by_id(organization_id)
+   128→        plan = Plan.objects.get(stripe_price_id=plan_id)
+   129→
+   130→        subscription = Subscription.objects.create(
+   131→            organization=organization,
+   132→            plan=plan,
+   133→            stripe_customer_id=stripe_customer_id,
+   134→            status=Subscription.Status.ACTIVE,
+   135→        )
+   136→
+   137→        create_audit_log(
+   138→            action="subscription.created",
+   139→            actor=organization.owner,
+   140→            target=subscription,
+   141→            metadata={"plan_id": plan_id},
+   142→        )
+   143→
+   144→        return subscription
+   145→
+   146→    @staticmethod
+   147→    def check_quota(
+   148→        organization_id: int,
+   149→        quota_code: str,
+   150→        increment: int = 1,
+   151→    ) -> bool:
+   152→        """Verifica se a organização possui quota disponível."""
+   153→        subscription = BillingService.get_active_subscription(organization_id)
+   154→        if not subscription:
+   155→            return False
+   156→
+   157→        return subscription.plan.has_quota(quota_code, increment)
+   158→```
+   159→
+   160→**Regras do Service Layer:**
+   161→- Cada service é uma classe com métodos estáticos ou uma instância singleton
+   162→- Services orquestram operações entre models, selectors e outros services
+   163→- Services gerenciam transações de banco de dados
+   164→- Services emitem signals para desacoplar efeitos colaterais
+   165→- Services nunca retornam objetos HTTP (Request/Response); isso é responsabilidade da view
+   166→
+   167→### 3.2 Selector Layer Pattern
+   168→
+   169→Toda consulta complexa ao banco de dados reside em selectors. Selectors são funções puras que recebem parâmetros e retornam QuerySets ou instâncias de models.
+   170→
+   171→```python
+   172→# apps/organizations/selectors.py
+   173→
+   174→from typing import Optional
+   175→from django.db.models import QuerySet
+   176→from apps.organizations.models import Organization, Membership
+   177→
+   178→
+   179→def get_organization_by_id(
+   180→    organization_id: int,
+   181→    *,
+   182→    select_related: tuple[str, ...] = ("owner",),
+   183→    prefetch_related: tuple[str, ...] = ("members",),
+   184→) -> Organization:
+   185→    """Retorna uma organização pelo ID com otimizações de queryset."""
+   186→    return Organization.objects\
+   187→        .select_related(*select_related)\
+   188→        .prefetch_related(*prefetch_related)\
+   189→        .get(id=organization_id)
+   190→
+   191→
+   192→def get_user_organizations(
+   193→    user_id: int,
+   194→    *,
+   195→    role: Optional[str] = None,
+   196→    status: Optional[str] = Membership.Status.ACTIVE,
+   197→) -> QuerySet[Organization]:
+   198→    """Retorna todas as organizações de um usuário com filtro opcional."""
+   199→    queryset = Organization.objects.filter(
+   200→        memberships__user_id=user_id,
+   201→        memberships__status=status,
+   202→    )
+   203→
+   204→    if role:
+   205→        queryset = queryset.filter(memberships__role=role)
+   206→
+   207→    return queryset.distinct()
+   208→
+   209→
+   210→def get_organization_members(
+   211→    organization_id: int,
+   212→    *,
+   213→    role: Optional[str] = None,
+   214→    limit: int = 100,
+   215→    offset: int = 0,
+   216→) -> QuerySet[Membership]:
+   217→    """Retorna membros de uma organização com paginação e filtro."""
+   218→    queryset = Membership.objects.filter(
+   219→        organization_id=organization_id,
+   220→        status=Membership.Status.ACTIVE,
+   221→    ).select_related("user", "invited_by")
+   222→
+   223→    if role:
+   224→        queryset = queryset.filter(role=role)
+   225→
+   226→    return queryset[offset:offset + limit]
+   227→```
+   228→
+   229→**Regras do Selector Layer:**
+   230→- Selectors são funções puras (sem efeitos colaterais)
+   231→- Selectors nunca modificam dados (apenas leitura)
+   232→- Selectors sempre recebem parâmetros tipados
+   233→- Selectors usam select_related/prefetch_related para otimização
+   234→- Selectors suportam paginação via parâmetros limit/offset
+   235→
+   236→### 3.3 Strategy Pattern — Provedores de IA
+   237→
+   238→```python
+   239→# apps/ai/providers/base.py
+   240→
+   241→from abc import ABC, abstractmethod
+   242→from dataclasses import dataclass
+   243→from typing import AsyncIterator, Optional
+   244→
+   245→
+   246→@dataclass
+   247→class AIMessage:
+   248→    role: str  # "system", "user", "assistant"
+   249→    content: str
+   250→    metadata: dict = field(default_factory=dict)
+   251→
+   252→
+   253→@dataclass
+   254→class AIResponse:
+   255→    content: str
+   256→    model: str
+   257→    tokens_used: int
+   258→    finish_reason: str
+   259→    metadata: dict = field(default_factory=dict)
+   260→
+   261→
+   262→class AIProvider(ABC):
+   263→    """Interface base para provedores de IA."""
+   264→
+   265→    name: str
+   266→    models: list[str]
+   267→
+   268→    @abstractmethod
+   269→    async def complete(
+   270→        self,
+   271→        messages: list[AIMessage],
+   272→        model: str,
+   273→        temperature: float = 0.7,
+   274→        max_tokens: int = 4096,
+   275→        **kwargs,
+   276→    ) -> AIResponse:
+   277→        """Executa uma chamada de completude síncrona."""
+   278→        ...
+   279→
+   280→    @abstractmethod
+   281→    async def stream(
+   282→        self,
+   283→        messages: list[AIMessage],
+   284→        model: str,
+   285→        temperature: float = 0.7,
+   286→        max_tokens: int = 4096,
+   287→        **kwargs,
+   288→    ) -> AsyncIterator[str]:
+   289→        """Executa uma chamada de streaming."""
+   290→        ...
+   291→
+   292→    @abstractmethod
+   293→    def count_tokens(self, text: str, model: str) -> int:
+   294→        """Conta tokens para o texto dado."""
+   295→        ...
+   296→
+   297→    @abstractmethod
+   298→    async def validate_api_key(self) -> bool:
+   299→        """Valida se a API key configurada é válida."""
+   300→        ...
+   301→```
+   302→
+   303→### 3.4 Observer Pattern — Signals
+   304→
+   305→```python
+   306→# apps/billing/signals.py
+   307→
+   308→from django.db.models.signals import post_save
+   309→from django.dispatch import receiver
+   310→from apps.billing.models import Subscription
+   311→from apps.quotas.services import initialize_quotas
+   312→from apps.notifications.services import send_notification
+   313→
+   314→
+   315→@receiver(post_save, sender=Subscription)
+   316→def on_subscription_created(sender, instance, created, **kwargs):
+   317→    """Quando uma assinatura é criada, inicializa quotas e notifica."""
+   318→    if created:
+   319→        initialize_quotas(
+   320→            organization_id=instance.organization_id,
+   321→            plan_id=instance.plan_id,
+   322→        )
+   323→        send_notification(
+   324→            channel="email",
+   325→            recipient=instance.organization.owner.email,
+   326→            template="billing.subscription_created",
+   327→            context={"plan": instance.plan.name},
+   328→        )
+   329→```
+   330→
+   331→### 3.5 Factory Pattern — Criação de Agentes
+   332→
+   333→```python
+   334→# apps/agents/factories.py
+   335→
+   336→from apps.agents.models import Agent, AgentTool
+   337→from apps.ai.services import get_provider
+   338→
+   339→
+   340→class AgentFactory:
+   341→    """Fábrica para criação e configuração de agentes de IA."""
+   342→
+   343→    @staticmethod
+   344→    def create_agent(
+   345→        name: str,
+   346→        description: str,
+   347→        model: str,
+   348→        system_prompt: str,
+   349→        temperature: float = 0.7,
+   350→        tools: list[str] = None,
+   351→        organization_id: int = None,
+   352→        **kwargs,
+   353→    ) -> Agent:
+   354→        """Cria um novo agente com configuração completa."""
+   355→        agent = Agent.objects.create(
+   356→            name=name,
+   357→            description=description,
+   358→            model=model,
+   359→            system_prompt=system_prompt,
+   360→            temperature=temperature,
+   361→            organization_id=organization_id,
+   362→            **kwargs,
+   363→        )
+   364→
+   365→        if tools:
+   366→            agent_tools = AgentTool.objects.filter(code__in=tools)
+   367→            agent.tools.set(agent_tools)
+   368→
+   369→        return agent
+   370→
+   371→    @staticmethod
+   372→    def get_executable_agent(agent: Agent):
+   373→        """Retorna um agente pronto para execução com provider configurado."""
+   374→        provider = get_provider(agent.provider)
+   375→        return ExecutableAgent(agent=agent, provider=provider)
+   376→```
+   377→
+   378→### 3.6 Adapter Pattern — Armazenamento
+   379→
+   380→```python
+   381→# apps/storage/adapters/base.py
+   382→
+   383→from abc import ABC, abstractmethod
+   384→from typing import BinaryIO, Optional
+   385→from dataclasses import dataclass
+   386→
+   387→
+   388→@dataclass
+   389→class StorageObject:
+   390→    key: str
+   391→    url: str
+   392→    size: int
+   393→    content_type: str
+   394→    metadata: dict
+   395→
+   396→
+   397→class StorageBackend(ABC):
+   398→    """Interface base para backends de armazenamento."""
+   399→
+   400→    name: str
+   401→
+   402→    @abstractmethod
+   403→    def upload(self, key: str, data: BinaryIO, content_type: str = None,
+   404→               metadata: dict = None) -> StorageObject:
+   405→        """Faz upload de um arquivo."""
+   406→        ...
+   407→
+   408→    @abstractmethod
+   409→    def download(self, key: str) -> BinaryIO:
+   410→        """Faz download de um arquivo."""
+   411→        ...
+   412→
+   413→    @abstractmethod
+   414→    def delete(self, key: str) -> bool:
+   415→        """Deleta um arquivo."""
+   416→        ...
+   417→
+   418→    @abstractmethod
+   419→    def get_url(self, key: str, expires_in: int = 3600) -> str:
+   420→        """Gera uma URL assinada temporária."""
+   421→        ...
+   422→
+   423→    @abstractmethod
+   424→    def list_objects(self, prefix: str = "") -> list[StorageObject]:
+   425→        """Lista objetos com determinado prefixo."""
+   426→        ...
+   427→```
+   428→
+   429→---
+   430→
+   431→## 4. Arquitetura dos Apps
+   432→
+   433→### 4.1 core — Configurações Compartilhadas
+   434→
+   435→- **Responsabilidade**: Ponto central de configuração do Company Core
+   436→- **Modelos**: Nenhum (apenas configurações)
+   437→- **Serviços**: `get_setting(tenant, key, default)`, `set_setting(tenant, key, value)`
+   438→- **Dependências**: Nenhuma (módulo base)
+   439→
+   440→### 4.2 common — Utilitários Reutilizáveis
+   441→
+   442→- **Responsabilidade**: Funções, mixins, helpers, exceptions e utilities compartilhadas
+   443→- **Modelos**: Nenhum
+   444→- **Componentes-chave**:
+   445→  - `TenantMixin` — Mixin para models com escopo de tenant
+   446→  - `TimestampMixin` — Herdado do BaseModel do Pegasus
+   447→  - `ServiceException` — Hierarquia de exceptions de negócio
+   448→  - `PaginationHelper` — Helpers de paginação
+   449→  - `ValidationHelper` — Validações comuns
+   450→- **Dependências**: Nenhuma (módulo base)
+   451→
+   452→### 4.3 settings — Configurações Dinâmicas
+   453→
+   454→- **Responsabilidade**: Configurações dinâmicas por tenant e ambiente
+   455→- **Modelos**: `TenantSetting(key, value, tenant, environment)`
+   456→- **Serviços**: `get_tenant_setting()`, `set_tenant_setting()`, `get_global_setting()`
+   457→- **Dependências**: organizations
+   458→
+   459→### 4.4 organizations — Multi-Tenancy
+   460→
+   461→- **Responsabilidade**: Gerenciamento de organizações, times, convites e membros
+   462→- **Modelos**:
+   463→  - `Organization(name, slug, owner, status, metadata)`
+   464→  - `Membership(user, organization, role, status, invited_by)`
+   465→  - `Invitation(email, organization, role, token, accepted_at)`
+   466→- **Serviços**: `create_organization()`, `invite_member()`, `accept_invitation()`, `remove_member()`
+   467→- **Selectors**: `get_user_organizations()`, `get_org_members()`, `get_org_by_slug()`
+   468→- **Signals**: `organization_created`, `member_added`, `member_removed`
+   469→- **Dependências**: common, core
+   470→
+   471→### 4.5 permissions — RBAC
+   472→
+   473→- **Responsabilidade**: Sistema de controle de acesso baseado em papéis
+   474→- **Modelos**:
+   475→  - `Role(name, organization, permissions)`
+   476→  - `Permission(code, name, description, module)`
+   477→  - `RolePermission(role, permission)`
+   478→- **Serviços**: `assign_role()`, `check_permission()`, `create_role()`
+   479→- **Selectors**: `get_user_permissions()`, `get_role_permissions()`
+   480→- **Dependências**: organizations, common
+   481→
+   482→### 4.6 billing — Stripe Billing
+   483→
+   484→- **Responsabilidade**: Gestão de planos, assinaturas, pagamentos e consumo via Stripe
+   485→- **Modelos**:
+   486→  - `Plan(name, stripe_price_id, features, limits, is_active)`
+   487→  - `Subscription(organization, plan, stripe_subscription_id, status, current_period_start, current_period_end)`
+   488→  - `PaymentAttempt(subscription, amount, status, stripe_payment_intent_id)`
+   489→- **Serviços**: `create_subscription()`, `cancel_subscription()`, `upgrade_plan()`, `handle_webhook()`
+   490→- **Tasks**: `sync_stripe_products`, `process_retry_payment`
+   491→- **Dependências**: organizations, quotas, feature_flags, audit
+   492→
+   493→### 4.7 quotas — Sistema de Quotas
+   494→
+   495→- **Responsabilidade**: Gestão configurável de quotas por tenant (vídeos, prompts, GB, etc.)
+   496→- **Modelos**:
+   497→  - `QuotaDefinition(code, name, unit, default_limit, description)`
+   498→  - `QuotaAllocation(organization, definition, limit, used, period)`
+   499→- **Serviços**: `check_quota()`, `increment_usage()`, `reset_quotas()`, `get_quota_status()`
+   500→- **Dependências**: organizations, billing
+   501→
+   502→### 4.8 feature_flags — Funcionalidades
+   503→
+   504→- **Responsabilidade**: Sistema de feature flags por plano, tenant, usuário e ambiente (extende django-waffle)
+   505→- **Modelos**:
+   506→  - `FeatureFlag(code, name, description, is_active)`
+   507→  - `FeatureFlagAssignment(flag, organization, user, environment, is_active)`
+   508→- **Serviços**: `is_feature_enabled()`, `enable_feature()`, `disable_feature()`
+   509→- **Dependências**: organizations, billing
+   510→
+   511→### 4.9 ai — Provedores de IA
+   512→
+   513→- **Responsabilidade**: Abstração única para múltiplos provedores de IA
+   514→- **Modelos**:
+   515→  - `AIProviderConfig(provider_name, api_key_ref, models, is_default, organization)`
+   516→  - `AIModelConfig(model_id, display_name, provider, max_tokens, cost_per_token)`
+   517→  - `AICallLog(organization, model, tokens_input, tokens_output, cost, latency_ms)`
+   518→- **Provedores implementados**: `OpenAIProvider`, `AnthropicProvider`, `GeminiProvider`
+   519→- **Serviços**: `get_provider()`, `call_ai()`, `stream_ai()`, `log_ai_call()`
+   520→- **Dependências**: organizations, usage, audit
+   521→
+   522→### 4.10 agents — Framework de Agentes
+   523→
+   524→- **Responsabilidade**: Framework para criação e execução de agentes de IA
+   525→- **Modelos**:
+   526→  - `Agent(name, description, system_prompt, model, temperature, memory_config, organization)`
+   527→  - `AgentTool(name, code, description, handler_path)`
+   528→  - `AgentExecution(agent, status, input, output, tokens_used, duration_ms)`
+   529→- **Serviços**: `create_agent()`, `execute_agent()`, `get_agent_response()`
+   530→- **Dependências**: ai, organizations, usage, audit
+   531→
+   532→### 4.11 notifications — Notificações
+   533→
+   534→- **Responsabilidade**: Sistema extensível de notificações (email, webhook, Slack, Discord)
+   535→- **Modelos**:
+   536→  - `NotificationTemplate(code, subject, body_html, body_text, channel)`
+   537→  - `NotificationLog(recipient, template, channel, status, sent_at)`
+   538→  - `NotificationChannel(type, name, config, organization)`
+   539→- **Serviços**: `send_notification()`, `register_channel()`, `render_template()`
+   540→- **Dependências**: organizations, common
+   541→
+   542→### 4.12 integrations — Integrações
+   543→
+   544→- **Responsabilidade**: Framework para integrações com serviços externos
+   545→- **Modelos**:
+   546→  - `Integration(name, type, credentials_encrypted, status, organization)`
+   547→  - `IntegrationLog(integration, action, request, response, status, duration_ms)`
+   548→- **Serviços**: `create_integration()`, `call_integration()`, `health_check()`
+   549→- **Dependências**: organizations, storage, audit
+   550→
+   551→### 4.13 audit — Auditoria
+   552→
+   553→- **Responsabilidade**: Registro completo de ações (login, CRUD, billing, IA, webhooks, API)
+   554→- **Modelos**:
+   555→  - `AuditLog(actor, action, target_type, target_id, ip_address, user_agent, metadata)`
+   556→- **Selectors**: `get_audit_logs()`, `get_entity_history()`, `get_user_activity()`
+   557→- **Serviços**: `create_audit_log()`, `export_audit_logs()`
+   558→- **Dependências**: organizations, common
+   559→
+   560→### 4.14 analytics — Análise de Uso
+   561→
+   562→- **Responsabilidade**: Dashboard de uso por tenant, usuário, módulo, consumo IA e storage
+   563→- **Modelos**:
+   564→  - `AnalyticsEvent(tenant, user, event_type, module, metadata, timestamp)`
+   565→  - `AnalyticsAggregation(tenant, period, module, metric, value)`
+   566→- **Serviços**: `track_event()`, `get_tenant_analytics()`, `get_module_usage()`
+   567→- **Dependências**: usage, organizations, ai
+   568→
+   569→### 4.15 usage — Métricas de Uso
+   570→
+   571→- **Responsabilidade**: Centralização de métricas (tokens, requests, arquivos, uploads, downloads)
+   572→- **Modelos**:
+   573→  - `UsageRecord(tenant, user, metric_type, value, unit, period, metadata)`
+   574→  - `UsageAggregation(tenant, metric_type, period, total)`
+   575→- **Serviços**: `record_usage()`, `get_usage()`, `get_usage_summary()`
+   576→- **Dependências**: organizations, common
+   577→
+   578→### 4.16 storage — Armazenamento
+   579→
+   580→- **Responsabilidade**: Abstração de armazenamento (S3, MinIO, Cloudflare R2, local)
+   581→- **Modelos**:
+   582→  - `StorageBackendConfig(name, type, config_encrypted, is_default, organization)`
+   583→  - `StoredObject(key, bucket, size, content_type, checksum, uploaded_by, organization)`
+   584→- **Serviços**: `upload_file()`, `download_file()`, `delete_file()`, `get_signed_url()`
+   585→- **Dependências**: organizations, usage, audit
+   586→
+   587→### 4.17 api — Framework REST
+   588→
+   589→- **Responsabilidade**: API REST versionada com API Keys, rate limiting e OpenAPI
+   590→- **Modelos**:
+   591→  - `APIKey(name, key_hash, user, organization, scopes, is_active, last_used_at, expires_at)`
+   592→  - `PersonalAccessToken(name, token_hash, user, scopes, expires_at)`
+   593→  - `ServiceAccount(name, token_hash, organization, permissions)`
+   594→- **Serviços**: `create_api_key()`, `validate_api_key()`, `check_rate_limit()`
+   595→- **Dependências**: organizations, permissions, usage, audit
+   596→
+   597→### 4.18 webhooks — Webhooks Universais
+   598→
+   599→- **Responsabilidade**: Sistema de webhooks de entrada e saída com retry e assinaturas
+   600→- **Modelos**:
+   601→  - `WebhookEndpoint(url, secret, events, organization, is_active)`
+   602→  - `WebhookDelivery(endpoint, event, payload, status, attempts, response_code)`
+   603→  - `WebhookEvent(type, data, timestamp)`
+   604→- **Serviços**: `register_webhook()`, `deliver_webhook()`, `process_incoming()`, `verify_signature()`
+   605→- **Tasks**: `deliver_webhooks_task`, `retry_failed_webhooks`
+   606→- **Dependências**: organizations, audit, jobs
+   607→
+   608→### 4.19 workflows — Motor de Workflows
+   609→
+   610→- **Responsabilidade**: Motor de workflows com pipeline, etapas, execução e retry
+   611→- **Modelos**:
+   612→  - `Workflow(name, description, steps_config, organization)`
+   613→  - `WorkflowExecution(workflow, status, current_step, input_data, output_data)`
+   614→  - `WorkflowStepLog(execution, step, status, input, output, error, duration_ms)`
+   615→- **Serviços**: `create_workflow()`, `execute_workflow()`, `resume_workflow()`
+   616→- **Dependências**: jobs, organizations, audit
+   617→
+   618→### 4.20 jobs — Gerenciamento de Filas
+   619→
+   620→- **Responsabilidade**: Gestão de filas Celery com retry, dead letter e prioridades
+   621→- **Modelos**:
+   622→  - `Job(name, task_path, status, priority, retries, max_retries, last_error, organization)`
+   623→- **Serviços**: `enqueue_job()`, `retry_job()`, `get_queue_status()`, `purge_dead_letter()`
+   624→- **Dependências**: common, organizations
+   625→
+   626→### 4.21 sdk — SDK Interno
+   627→
+   628→- **Responsabilidade**: SDK interno para facilitar comunicação entre módulos
+   629→- **Componentes**:
+   630→  - `BillingSDK` — Interface simplificada para operações de billing
+   631→  - `QuotaSDK` — Interface simplificada para verificação de quotas
+   632→  - `AISDK` — Interface simplificada para chamadas de IA
+   633→  - `StorageSDK` — Interface simplificada para upload/download
+   634→  - `NotificationSDK` — Interface simplificada para envio de notificações
+   635→- **Dependências**: billing, quotas, ai, storage, notifications
+   636→
+   637→### 4.22 health — Health Checks
+   638→
+   639→- **Responsabilidade**: Endpoints de verificação de saúde do sistema
+   640→- **Endpoints**: `/health` (básico), `/ready` (dependências), `/live` (liveness probe)
+   641→- **Serviços**: `check_database()`, `check_redis()`, `check_storage()`, `check_ai_providers()`
+   642→- **Dependências**: storage, ai, jobs
+   643→
+   644→### 4.23 search — Busca
+   645→
+   646→- **Responsabilidade**: Funcionalidade de busca全文 com suporte a múltiplos backends
+   647→- **Modelos**: `SearchIndex(content_type, object_id, content, metadata)`
+   648→- **Serviços**: `index_object()`, `search()`, `remove_index()`
+   649→- **Dependências**: organizations, common
+   650→
+   651→### 4.24 admin — Painéis Administrativos
+   652→
+   653→- **Responsabilidade**: Extensão do Django Admin com painéis para billing, uso, filas, IA, health
+   654→- **Componentes**: `BillingAdmin`, `QuotaAdmin`, `AIAdmin`, `QueueAdmin`, `HealthAdmin`
+   655→- **Dependências**: billing, quotas, ai, jobs, health, analytics
+   656→
+   657→---
+   658→
+   659→## 5. Multi-Tenancy
+   660→
+   661→### Modelo de Isolamento
+   662→
+   663→O Company Core utiliza **isolamento lógico por tenant** (shared database, isolated rows). Cada organização é um tenant e todas as operações são automaticamente filtradas pelo tenant ativo.
+   664→
+   665→```python
+   666→# apps/common/mixins.py
+   667→
+   668→class TenantMixin(models.Model):
+   669→    """Mixin que adiciona escopo de tenant a qualquer modelo."""
+   670→    organization = models.ForeignKey(
+   671→        "organizations.Organization",
+   672→        on_delete=models.CASCADE,
+   673→        related_name="%(class)s_set",
+   674→    )
+   675→
+   676→    class Meta:
+   677→        abstract = True
+   678→
+   679→    objects = TenantManager()
+   680→```
+   681→
+   682→### Tenant Middleware
+   683→
+   684→```python
+   685→# apps/organizations/middleware.py
+   686→
+   687→class TenantMiddleware:
+   688→    """Middleware que injeta o tenant ativo na request."""
+   689→
+   690→    def __init__(self, get_response):
+   691→        self.get_response = get_response
+   692→
+   693→    def __call__(self, request):
+   694→        if request.user.is_authenticated:
+   695→            # Tenta determinar o tenant ativo
+   696→            org_id = request.session.get("active_organization_id")
+   697→            if org_id:
+   698→                try:
+   699→                    request.tenant = Organization.objects.get(
+   700→                        id=org_id,
+   701→                        memberships__user=request.user,
+   702→                    )
+   703→                except Organization.DoesNotExist:
+   704→                    request.tenant = None
+   705→            else:
+   706→                # Usa a primeira organização do usuário
+   707→                first_org = Organization.objects.filter(
+   708→                    memberships__user=request.user,
+   709→                ).first()
+   710→                request.tenant = first_org
+   711→        else:
+   712→            request.tenant = None
+   713→
+   714→        return self.get_response(request)
+   715→```
+   716→
+   717→### Tenant Manager
+   718→
+   719→```python
+   720→# apps/common/managers.py
+   721→
+   722→class TenantManager(models.Manager):
+   723→    """Manager que automaticamente filtra por tenant ativo."""
+   724→
+   725→    def get_queryset(self):
+   726→        queryset = super().get_queryset()
+   727→        # Se houver tenant ativo no contexto, filtra automaticamente
+   728→        tenant = get_current_tenant()
+   729→        if tenant:
+   730→            queryset = queryset.filter(organization=tenant)
+   731→        return queryset
+   732→```
+   733→
+   734→---
+   735→
+   736→## 6. API Design
+   737→
+   738→### Versionamento
+   739→
+   740→A API segue versionamento por URL path: `/api/v1/`, `/api/v2/`. Cada versão é um módulo Django separado.
+   741→
+   742→```python
+   743→# project/urls.py
+   744→
+   745→urlpatterns = [
+   746→    path("api/v1/", include("apps.api.v1.urls")),
+   747→    path("api/v2/", include("apps.api.v2.urls")),
+   748→    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+   749→    path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema")),
+   750→]
+   751→```
+   752→
+   753→### Autenticação API Key
+   754→
+   755→```python
+   756→# apps/api/authentication.py
+   757→
+   758→class APIKeyAuthentication(BaseAuthentication):
+   759→    """Autenticação via API Key para acesso programático."""
+   760→
+   761→    def authenticate(self, request):
+   762→        api_key = request.headers.get("Authorization", "").replace("Bearer ", "")
+   763→        if not api_key:
+   764→            return None
+   765→
+   766→        try:
+   767→            key_obj = APIKey.objects.select_related("user", "organization")\
+   768→                .get(key_hash=hash_api_key(api_key), is_active=True)
+   769→
+   770→            if key_obj.expires_at and key_obj.expires_at < timezone.now():
+   771→                raise AuthenticationFailed("API key expired")
+   772→
+   773→            key_obj.last_used_at = timezone.now()
+   774→            key_obj.save(update_fields=["last_used_at"])
+   775→
+   776→            return (key_obj.user, {"organization": key_obj.organization, "api_key": key_obj})
+   777→        except APIKey.DoesNotExist:
+   778→            raise AuthenticationFailed("Invalid API key")
+   779→```
+   780→
+   781→### Rate Limiting
+   782→
+   783→```python
+   784→# apps/api/throttling.py
+   785→
+   786→class TenantRateThrottle(BaseThrottle):
+   787→    """Rate limiting por tenant baseado em plano."""
+   788→
+   789→    def allow_request(self, request, view):
+   790→        tenant = getattr(request, "tenant", None)
+   791→        if not tenant:
+   792→            return True
+   793→
+   794→        plan = get_tenant_plan(tenant.id)
+   795→        rate_limit = plan.api_rate_limit  # Ex: "1000/hour"
+   796→
+   797→        key = f"tenant:{tenant.id}"
+   798→        if not self.cache.get(key):
+   799→            self.cache.set(key, plan.api_requests_per_hour, 3600)
+   800→
+   801→        return self.cache.incr(key) <= plan.api_requests_per_hour
+   802→```
+   803→
+   804→### Padrão de Resposta
+   805→
+   806→```python
+   807→# apps/api/paginaton.py
+   808→
+   809→class StandardizedResponse(Pagination):
+   810→    """Resposta padronizada com metadados."""
+   811→
+   812→    def get_paginated_response(self, data):
+   813→        return Response({
+   814→            "success": True,
+   815→            "data": data,
+   816→            "pagination": {
+   817→                "count": self.page.paginator.count,
+   818→                "next": self.get_next_link(),
+   819→                "previous": self.get_previous_link(),
+   820→                "page": self.page.number,
+   821→                "page_size": self.get_page_size(self.request),
+   822→                "total_pages": self.page.paginator.num_pages,
+   823→            },
+   824→        })
+   825→```
+   826→
+   827→---
+   828→
+   829→## 7. Padrão de App (Template)
+   830→
+   831→Cada app segue exatamente esta estrutura:
+   832→
+   833→```
+   834→apps/<app_name>/
+   835→    __init__.py
+   836→    models.py            # Modelos de dados
+   837→    views.py            # Views (HTMX e/ou DRF)
+   838→    services.py         # Lógica de negócio (Service Layer)
+   839→    selectors.py        # Consultas complexas (Selector Layer)
+   840→    tasks.py            # Tarefas Celery
+   841→    signals.py          # Signals Django
+   842→    serializers.py      # Serializadores DRF
+   843→    urls.py             # Rotas da app
+   844→    admin.py            # Configuração do Django Admin
+   845→    apps.py             # App config
+   846→    migrations/
+   847→        __init__.py
+   848→    tests/
+   849→        __init__.py
+   850→        test_models.py
+   851→        test_services.py
+   852→        test_views.py
+   853→        test_selectors.py
+   854→        test_tasks.py
+   855→        test_api.py
+   856→        factories.py    # Factories para testes
+   857→    README.md           # Documentação do módulo
+   858→```
+   859→
+   860→---
+   861→
+   862→## 8. Configurações
+   863→
+   864→### Hierarquia de Settings
+   865→
+   866→```
+   867→pegasus settings.py (base)
+   868→    └── company_core.settings.base (extensões Company Core)
+   869→        ├── company_core.settings.development
+   870→        ├── company_core.settings.staging
+   871→        └── company_core.settings.production
+   872→            └── .env (variáveis de ambiente por ambiente)
+   873→```
+   874→
+   875→### Configuração Dinâmica por Tenant
+   876→
+   877→```python
+   878→# apps/settings/services.py
+   879→
+   880→class SettingsService:
+   881→    """Serviço para configurações dinâmicas."""
+   882→
+   883→    @staticmethod
+   884→    def get(tenant, key: str, default=None):
+   885→        """Obtém uma configuração por tenant."""
+   886→        cache_key = f"settings:{tenant.id}:{key}"
+   887→        cached = cache.get(cache_key)
+   888→        if cached is not None:
+   889→            return cached
+   890→
+   891→        try:
+   892→            setting = TenantSetting.objects.get(
+   893→                organization=tenant, key=key,
+   894→            )
+   895→            result = setting.value
+   896→        except TenantSetting.DoesNotExist:
+   897→            result = default
+   898→
+   899→        cache.set(cache_key, result, timeout=300)
+   900→        return result
+   901→
+   902→    @staticmethod
+   903→    def set(tenant, key: str, value: str):
+   904→        """Define uma configuração por tenant."""
+   905→        TenantSetting.objects.update_or_create(
+   906→            organization=tenant,
+   907→            key=key,
+   908→            defaults={"value": value},
+   909→        )
+   910→        cache.delete(f"settings:{tenant.id}:{key}")
+   911→```
+   912→
+   913→---
+   914→
+   915→## 9. Fluxo de Dados
+   916→
+   917→### Ciclo de Vida de Requisição HTTP
+   918→
+   919→```
+   920→Cliente → Nginx → Django WSGI/ASGI
+   921→    → TenantMiddleware (determina tenant)
+   922→    → AuthMiddleware (verifica autenticação)
+   923→    → RateLimitMiddleware (verifica limites)
+   924→    → View (HTMX ou DRF)
+   925→        → Service (lógica de negócio)
+   926→            → Selector (consulta de dados)
+   927→            → Model (ORM)
+   928→            → Signal (efeitos colaterais)
+   929→    → Response
+   930→    → AuditLog (registra ação)
+   931→    → UsageRecord (registra métrica)
+   932→→ Cliente
+   933→```
+   934→
+   935→### Ciclo de Vida de Tarefa Celery
+   936→
+   937→```
+   938→Evento → enqueue_job()
+   939→    → Celery Queue (por prioridade)
+   940→    → Worker executa tarefa
+   941→        → Service.process()
+   942→        → Result stored in Redis
+   943→    → On success:
+   944→        → Signal (task_completed)
+   945→        → Webhook delivery (se configurado)
+   946→        → Audit log
+   947→    → On failure:
+   948→        → Retry (com backoff exponencial)
+   949→        → Max retries → Dead Letter Queue
+   950→        → Notification (alerta)
+   951→```
+   952→
+   953→### Fluxo de Chamada IA
+   954→
+   955→```
+   956→Agent.execute(prompt)
+   957→    → AIService.get_provider(provider_name)
+   958→    → provider.complete(messages, model, temperature)
+   959→    → OpenAI/Anthropic/Gemini API call
+   960→    → AIResponse recebido
+   961→    → AICallLog (tokens, custo, latência)
+   962→    → UsageRecord.record("ai.tokens", token_count)
+   963→    → QuotaService.increment_usage(tenant, "ai_prompts")
+   964→    → Response retornada ao Agent
+   965→```
+   966→
+   967→---
+   968→
+   969→## 10. Segurança
+   970→
+   971→### Autenticação
+   972→
+   973→| Mecanismo | Uso | Implementação |
+   974→|-----------|-----|--------------|
+   975→| Session (Cookies) | Navegadores (HTMX) | Pegasus allauth |
+   976→| API Key | Acesso programático | Company Core API |
+   977→| Personal Access Token | CLI / Scripts | Company Core API |
+   978→| Service Account | Integrações sistema-a-sistema | Company Core API |
+   979→
+   980→### RBAC (Controle de Acesso Baseado em Papéis)
+   981→
+   982→```
+   983→Organization Owner (todas as permissões)
+   984→    └── Organization Admin (permissoes administrativas)
+   985→        └── Organization Member (permissoes de uso)
+   986→            └── Custom Roles (definidas pelo tenant)
+   987→```
+   988→
+   989→### Isolamento de Dados
+   990→
+   991→- **Row-Level Security**: Todos os models usam `TenantMixin` com `TenantManager`
+   992→- **Middleware enforcement**: `TenantMiddleware` garante que `request.tenant` está sempre presente
+   993→- **API enforcement**: Todas as APIs filtram por tenant automaticamente
+   994→- **Service enforcement**: Services recebem `organization_id` obrigatório
+   995→- **Test coverage**: Testes automatizados para vazamento cross-tenant
+   996→
+   997→### Audit Trail
+   998→
+   999→Todas as ações sensíveis são registradas:
+  1000→- Login/Logout
+  1001→- Criação/Alteração/Exclusão de qualquer recurso
+  1002→- Chamadas de API (incluindo parâmetros)
+  1003→- Chamadas IA (modelo, tokens, custo)
+  1004→- Webhooks enviados/recebidos
+  1005→- Alterações de billing (upgrade, downgrade, cancelamento)
+  1006→- Alterações de permissões
+  1007→
+  1008→---
+  1009→
+  1010→## 11. Escalabilidade
+  1011→
+  1012→### Estratégia de Filas Celery
+  1013→
+  1014→```
+  1015→default      → Tarefas gerais (baixa prioridade)
+  1016→billing      → Tarefas de billing (média prioridade)
+  1017→ai           → Tarefas de IA (alta prioridade)
+  1018→webhooks     → Entrega de webhooks (média prioridade)
+  1019→workflows    → Execução de workflows (alta prioridade)
+  1020→analytics    → Agregação de métricas (baixa prioridade)
+  1021→notifications → Envio de notificações (média prioridade)
+  1022→```
+  1023→
+  1024→### Estratégia de Cache
+  1025→
+  1026→```
+  1027→Redis Cache Layers:
+  1028→    L1: Query cache (selectors, 5 min TTL)
+  1029→    L2: Settings cache (tenant settings, 5 min TTL)
+  1030→    L3: Feature flags cache (1 min TTL)
+  1031→    L4: Quota cache (real-time, 30 sec TTL)
+  1032→```
+  1033→
+  1034→### Estratégia de Armazenamento
+  1035→
+  1036→```
+  1037→Storage Tiers:
+  1038→    Hot (S3/R2): Arquivos ativos (últimos 30 dias)
+  1039→    Warm (S3 Glacier): Arquivos antigos (30+ dias)
+  1040→    Cold: Arquivos deletados (retenção 30 dias antes de purge)
+  1041→```
+  1042→
+  1043→---
+  1044→
+  1045→## 12. Diagramas
+  1046→
+  1047→### Visão Geral do Sistema
+  1048→
+  1049→```
+  1050→                        ┌─────────────┐
+  1051→                        │   Cliente    │
+  1052→                        │ (Browser/CLI)│
+  1053→                        └──────┬──────┘
+  1054→                               │
+  1055→                        ┌──────▼──────┐
+  1056→                        │    Nginx     │
+  1057→                        │ (Reverse    │
+  1058→                        │  Proxy + SSL│
+  1059→                        └──────┬──────┘
+  1060→                               │
+  1061→              ┌────────────────┼────────────────┐
+  1062→              │                │                │
+  1063→       ┌──────▼──────┐ ┌─────▼──────┐ ┌──────▼──────┐
+  1064→       │  Django     │ │   Celery   │ │  Celery     │
+  1065→       │  (WSGI/ASGI)│ │  Worker 1  │ │  Worker N   │
+  1066→       └──────┬──────┘ └─────┬──────┘ └──────┬──────┘
+  1067→              │              │               │
+  1068→       ┌──────▼──────┐ ┌────▼─────┐ ┌──────▼──────┐
+  1069→       │ PostgreSQL  │ │  Redis   │ │   S3/R2     │
+  1070→       │  (Dados)   │ │(Cache/   │ │ (Storage)   │
+  1071→       │            │ │ Broker)  │ │             │
+  1072→       └────────────┘ └──────────┘ └─────────────┘
+  1073→              │              │               │
+  1074→       ┌──────▼──────────────▼───────────────▼──┐
+  1075→       │        Serviços Externos                │
+  1076→       │ Stripe │ OpenAI │ Anthropic │ Gemini    │
+  1077→       │ SMTP   │ Slack  │ Discord  │ Webhooks  │
+  1078→       └────────────────────────────────────────┘
+  1079→```
+  1080→
+  1081→### Fluxo Multi-Tenancy
+  1082→
+  1083→```
+  1084→Request → TenantMiddleware
+  1085→              │
+  1086→              ├─ Request.User autenticado?
+  1087→              │    │
+  1088→              │    ├─ Sim → Busca tenant ativo
+  1089→              │    │         ├─ Session tem active_organization_id?
+  1090→              │    │         │    ├─ Sim → request.tenant = org
+  1091→              │    │         │    └─ Não → primeira org do user
+  1092→              │    │         └─ Salva na request
+  1093→              │    │
+  1094→              │    └─ Não → request.tenant = None
+  1095→              │
+  1096→              └─ View usa request.tenant para filtro
+  1097→                   Service usa organization_id para operações
+  1098→                   Selector usa TenantManager para consultas
+  1099→```
+  1100→
+  1101→---
+  1102→
+  1103→## Anexo: Glossário
+  1104→
+  1105→| Termo | Definição |
+  1106→|-------|----------|
+  1107→| **Tenant** | Organização/cliente no modelo multi-tenant |
+  1108→| **Service Layer** | Camada de serviços onde reside toda lógica de negócio |
+  1109→| **Selector Layer** | Camada de consultas otimizadas para o banco de dados |
+  1110→| **Pegasus** | SaaS Pegasus — boilerplate Django utilizado como fundação |
+  1111→| **Quota** | Limite configurável de uso por tenant |
+  1112→| **Feature Flag** | Flag para habilitar/desabilitar funcionalidades |
+  1113→| **Provider** | Provedor de IA (OpenAI, Anthropic, Gemini) |
+  1114→| **Agent** | Instância configurável de IA com ferramentas e memória |
+  1115→| **Webhook** | Callback HTTP para notificação de eventos |
+  1116→| **Dead Letter Queue** | Fila para tarefas com falha permanente |
+  1117→

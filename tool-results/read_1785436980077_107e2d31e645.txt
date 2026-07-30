@@ -1,0 +1,721 @@
+     1→"""Serializers DRF e ViewSets para o módulo de Tarefas do Company Radar."""
+     2→
+     3→from rest_framework import serializers, permissions, filters, status as http_status
+     4→from rest_framework.viewsets import ModelViewSet
+     5→from rest_framework.decorators import action
+     6→from rest_framework.permissions import IsAuthenticated
+     7→from rest_framework.response import Response
+     8→
+     9→from apps.radar_tasks.models import (
+    10→    Task,
+    11→    TaskAssignment,
+    12→    TaskDependency,
+    13→    ChecklistItem,
+    14→    TaskComment,
+    15→    TaskFollower,
+    16→    TaskAttachment,
+    17→    RecurrenceRule,
+    18→    SavedFilter,
+    19→    TaskStatus,
+    20→    ChecklistStatus,
+    21→    TaskOrigin,
+    22→    TaskPriority,
+    23→)
+    24→
+    25→
+    26→# ─── Serializers auxiliares ──────────────────────────────────────────
+    27→
+    28→
+    29→class TaskAssignmentSerializer(serializers.ModelSerializer):
+    30→    """Serializer para atribuição de tarefa."""
+    31→
+    32→    user_name = serializers.CharField(source='user.get_full_name', read_only=True, default=None)
+    33→    user_email = serializers.EmailField(source='user.email', read_only=True, default=None)
+    34→
+    35→    class Meta:
+    36→        model = TaskAssignment
+    37→        fields = (
+    38→            'id', 'uuid', 'task', 'user', 'user_name', 'user_email',
+    39→            'role', 'is_active', 'created_at', 'updated_at',
+    40→        )
+    41→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+    42→
+    43→
+    44→class ChecklistItemSerializer(serializers.ModelSerializer):
+    45→    """Serializer para item de checklist."""
+    46→
+    47→    completed_by_name = serializers.CharField(
+    48→        source='completed_by.get_full_name', read_only=True, default=None,
+    49→    )
+    50→    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    51→
+    52→    class Meta:
+    53→        model = ChecklistItem
+    54→        fields = (
+    55→            'id', 'uuid', 'task', 'title', 'description',
+    56→            'status', 'status_display', 'completed_by', 'completed_by_name',
+    57→            'completed_at', 'is_required', 'display_order',
+    58→            'created_at', 'updated_at',
+    59→        )
+    60→        read_only_fields = ('id', 'uuid', 'completed_by', 'completed_by_name', 'completed_at', 'created_at', 'updated_at')
+    61→
+    62→
+    63→class TaskCommentSerializer(serializers.ModelSerializer):
+    64→    """Serializer para comentário de tarefa."""
+    65→
+    66→    author_name = serializers.CharField(source='author.get_full_name', read_only=True, default=None)
+    67→    author_email = serializers.EmailField(source='author.email', read_only=True, default=None)
+    68→
+    69→    class Meta:
+    70→        model = TaskComment
+    71→        fields = (
+    72→            'id', 'uuid', 'task', 'author', 'author_name', 'author_email',
+    73→            'body', 'mentions', 'is_internal', 'created_at', 'updated_at',
+    74→        )
+    75→        read_only_fields = ('id', 'uuid', 'author', 'author_name', 'author_email', 'created_at', 'updated_at')
+    76→
+    77→
+    78→class TaskDependencySerializer(serializers.ModelSerializer):
+    79→    """Serializer para dependência entre tarefas."""
+    80→
+    81→    source_task_title = serializers.CharField(source='source_task.title', read_only=True)
+    82→    source_task_status = serializers.IntegerField(source='source_task.status', read_only=True)
+    83→    target_task_title = serializers.CharField(source='target_task.title', read_only=True)
+    84→    target_task_status = serializers.IntegerField(source='target_task.status', read_only=True)
+    85→
+    86→    class Meta:
+    87→        model = TaskDependency
+    88→        fields = (
+    89→            'id', 'uuid', 'source_task', 'source_task_title', 'source_task_status',
+    90→            'target_task', 'target_task_title', 'target_task_status',
+    91→            'created_at', 'updated_at',
+    92→        )
+    93→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+    94→
+    95→
+    96→class TaskFollowerSerializer(serializers.ModelSerializer):
+    97→    """Serializer para seguidor de tarefa."""
+    98→
+    99→    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+   100→    user_email = serializers.EmailField(source='user.email', read_only=True)
+   101→
+   102→    class Meta:
+   103→        model = TaskFollower
+   104→        fields = ('id', 'task', 'user', 'user_name', 'user_email', 'created_at')
+   105→        read_only_fields = ('id', 'created_at')
+   106→
+   107→
+   108→class TaskAttachmentSerializer(serializers.ModelSerializer):
+   109→    """Serializer para anexo de tarefa."""
+   110→
+   111→    uploaded_by_name = serializers.CharField(source='uploaded_by.get_full_name', read_only=True, default=None)
+   112→
+   113→    class Meta:
+   114→        model = TaskAttachment
+   115→        fields = (
+   116→            'id', 'uuid', 'task', 'stored_object', 'filename', 'file_size',
+   117→            'content_type', 'uploaded_by', 'uploaded_by_name', 'created_at',
+   118→        )
+   119→        read_only_fields = ('id', 'uuid', 'created_at')
+   120→
+   121→
+   122→class RecurrenceRuleSerializer(serializers.ModelSerializer):
+   123→    """Serializer para regra de recorrência."""
+   124→
+   125→    frequency_display = serializers.CharField(source='get_frequency_display', read_only=True)
+   126→    weekend_policy_display = serializers.CharField(source='get_weekend_policy_display', read_only=True)
+   127→
+   128→    class Meta:
+   129→        model = RecurrenceRule
+   130→        fields = (
+   131→            'id', 'uuid', 'task_template', 'frequency', 'frequency_display',
+   132→            'interval', 'start_date', 'end_date', 'max_occurrences',
+   133→            'weekend_policy', 'weekend_policy_display', 'advance_days',
+   134→            'next_occurrence_date', 'last_generated', 'is_active',
+   135→            'created_at', 'updated_at',
+   136→        )
+   137→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+   138→
+   139→
+   140→class SavedFilterSerializer(serializers.ModelSerializer):
+   141→    """Serializer para filtro salvo."""
+   142→
+   143→    class Meta:
+   144→        model = SavedFilter
+   145→        fields = (
+   146→            'id', 'uuid', 'user', 'name', 'module', 'filters',
+   147→            'is_favorite', 'created_at', 'updated_at',
+   148→        )
+   149→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+   150→
+   151→
+   152→# ─── Serializers de Tarefa ───────────────────────────────────────────
+   153→
+   154→
+   155→class TaskListSerializer(serializers.ModelSerializer):
+   156→    """Serializer leve para listagem de tarefas.
+   157→
+   158→    Inclui contagem de checklist e dados de cliente/departamento.
+   159→    """
+   160→
+   161→    status_display = serializers.CharField(source='get_status_display', read_only=True)
+   162→    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+   163→    origin_display = serializers.CharField(source='get_origin_display', read_only=True)
+   164→    client_name = serializers.CharField(source='client.razao_social', read_only=True, default=None)
+   165→    department_name = serializers.CharField(source='department.name', read_only=True, default=None)
+   166→    is_overdue = serializers.BooleanField(read_only=True)
+   167→    checklist_progress = serializers.SerializerMethodField()
+   168→    assignee_names = serializers.SerializerMethodField()
+   169→
+   170→    class Meta:
+   171→        model = Task
+   172→        fields = (
+   173→            'id', 'uuid', 'title', 'client', 'client_name',
+   174→            'department', 'department_name', 'category',
+   175→            'priority', 'priority_display', 'status', 'status_display',
+   176→            'origin', 'origin_display', 'due_date', 'started_at',
+   177→            'completed_at', 'is_visible_in_portal', 'is_overdue',
+   178→            'checklist_progress', 'assignee_names', 'created_at',
+   179→        )
+   180→        read_only_fields = fields
+   181→
+   182→    def get_checklist_progress(self, obj):
+   183→        progress = obj.checklist_progress
+   184→        return progress
+   185→
+   186→    def get_assignee_names(self, obj):
+   187→        if hasattr(obj, '_prefetched_objects_cache') and 'assignments' in obj._prefetched_objects_cache:
+   188→            return [
+   189→                a.user.get_full_name()
+   190→                for a in obj._prefetched_objects_cache['assignments']
+   191→                if a.is_active and a.user
+   192→            ]
+   193→        return list(
+   194→            obj.assignments.filter(is_active=True)
+   195→            .values_list('user__first_name', flat=True)
+   196→        )
+   197→
+   198→
+   199→class TaskDetailSerializer(serializers.ModelSerializer):
+   200→    """Serializer completo para detalhe de tarefa.
+   201→
+   202→    Inclui atribuições, checklist, comentários, seguidores e anexos.
+   203→    """
+   204→
+   205→    status_display = serializers.CharField(source='get_status_display', read_only=True)
+   206→    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+   207→    origin_display = serializers.CharField(source='get_origin_display', read_only=True)
+   208→    client_name = serializers.CharField(source='client.razao_social', read_only=True, default=None)
+   209→    department_name = serializers.CharField(source='department.name', read_only=True, default=None)
+   210→    completed_by_name = serializers.CharField(source='completed_by.get_full_name', read_only=True, default=None)
+   211→    is_overdue = serializers.BooleanField(read_only=True)
+   212→    checklist_progress = serializers.SerializerMethodField()
+   213→    assignments = TaskAssignmentSerializer(many=True, read_only=True)
+   214→    checklist_items = ChecklistItemSerializer(many=True, read_only=True)
+   215→    comments = TaskCommentSerializer(many=True, read_only=True)
+   216→    followers = TaskFollowerSerializer(many=True, read_only=True)
+   217→    attachments = TaskAttachmentSerializer(many=True, read_only=True)
+   218→
+   219→    class Meta:
+   220→        model = Task
+   221→        fields = (
+   222→            'id', 'uuid', 'title', 'description',
+   223→            'client', 'client_name', 'department', 'department_name',
+   224→            'category', 'priority', 'priority_display',
+   225→            'status', 'status_display',
+   226→            'origin', 'origin_display',
+   227→            'due_date', 'started_at', 'completed_at', 'completed_by', 'completed_by_name',
+   228→            'estimated_duration',
+   229→            'is_visible_in_portal', 'portal_instructions', 'team_instructions',
+   230→            'template_application', 'template_task', 'process_stage',
+   231→            'is_recurring', 'recurrence_rule', 'parent_occurrence', 'occurrence_number',
+   232→            'internal_notes',
+   233→            'is_overdue', 'checklist_progress',
+   234→            'assignments', 'checklist_items', 'comments', 'followers', 'attachments',
+   235→            'is_deleted', 'deleted_at',
+   236→            'created_at', 'updated_at',
+   237→        )
+   238→        read_only_fields = (
+   239→            'id', 'uuid', 'origin', 'template_application', 'template_task',
+   240→            'process_stage', 'is_recurring', 'recurrence_rule', 'parent_occurrence',
+   241→            'occurrence_number', 'is_deleted', 'deleted_at',
+   242→            'created_at', 'updated_at',
+   243→        )
+   244→
+   245→    def get_checklist_progress(self, obj):
+   246→        return obj.checklist_progress
+   247→
+   248→
+   249→class TaskCreateSerializer(serializers.ModelSerializer):
+   250→    """Serializer para criação de tarefas via API."""
+   251→
+   252→    responsible_id = serializers.IntegerField(write_only=True, required=False)
+   253→    checklist_items = serializers.ListField(
+   254→        child=serializers.DictField(), write_only=True, required=False,
+   255→    )
+   256→
+   257→    class Meta:
+   258→        model = Task
+   259→        fields = (
+   260→            'title', 'description', 'client', 'department', 'category',
+   261→            'priority', 'due_date', 'estimated_duration',
+   262→            'is_visible_in_portal', 'portal_instructions', 'team_instructions',
+   263→            'internal_notes', 'responsible_id', 'checklist_items',
+   264→        )
+   265→
+   266→    def validate_title(self, value):
+   267→        if not value or not value.strip():
+   268→            raise serializers.ValidationError('O título é obrigatório.')
+   269→        return value.strip()
+   270→
+   271→
+   272→class BulkStatusUpdateSerializer(serializers.Serializer):
+   273→    """Serializer para atualização em massa de status."""
+   274→
+   275→    task_ids = serializers.ListField(
+   276→        child=serializers.UUIDField(),
+   277→        allow_empty=False,
+   278→    )
+   279→    new_status = serializers.ChoiceField(choices=TaskStatus.choices)
+   280→
+   281→
+   282→class CommentCreateSerializer(serializers.Serializer):
+   283→    """Serializer para criação de comentário."""
+   284→
+   285→    body = serializers.CharField()
+   286→    mentions = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+   287→    is_internal = serializers.BooleanField(default=False)
+   288→
+   289→    def validate_body(self, value):
+   290→        if not value or not value.strip():
+   291→            raise serializers.ValidationError('O comentário não pode estar vazio.')
+   292→        return value.strip()
+   293→
+   294→
+   295→class ChecklistToggleSerializer(serializers.Serializer):
+   296→    """Serializer vazio para toggle de checklist (usa URL params)."""
+   297→    pass
+   298→
+   299→
+   300→class AssignUserSerializer(serializers.Serializer):
+   301→    """Serializer para atribuição de usuário."""
+   302→
+   303→    user_id = serializers.IntegerField()
+   304→    role = serializers.CharField(default='responsavel', required=False)
+   305→
+   306→
+   307→class UpdateDueDateSerializer(serializers.Serializer):
+   308→    """Serializer para atualização de prazo."""
+   309→
+   310→    new_due_date = serializers.DateTimeField()
+   311→    reason = serializers.CharField(required=False, default='', allow_blank=True)
+   312→
+   313→
+   314→class ReopenCancelSerializer(serializers.Serializer):
+   315→    """Serializer para reabertura/cancelamento."""
+   316→
+   317→    reason = serializers.CharField()
+   318→
+   319→    def validate_reason(self, value):
+   320→        if not value or not value.strip():
+   321→            raise serializers.ValidationError('O motivo é obrigatório.')
+   322→        return value.strip()
+   323→
+   324→
+   325→# ─── ViewSets ────────────────────────────────────────────────────────
+   326→
+   327→
+   328→class TaskViewSet(ModelViewSet):
+   329→    """ViewSet para Tarefas com ações customizadas."""
+   330→
+   331→    permission_classes = [IsAuthenticated]
+   332→    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+   333→    search_fields = ['title', 'description', 'category', 'internal_notes']
+   334→    ordering_fields = ['due_date', 'priority', 'title', 'status', 'created_at']
+   335→
+   336→    def get_serializer_class(self):
+   337→        if self.action == 'list':
+   338→            return TaskListSerializer
+   339→        if self.action == 'create':
+   340→            return TaskCreateSerializer
+   341→        return TaskDetailSerializer
+   342→
+   343→    def get_queryset(self):
+   344→        org = getattr(self.request, 'tenant', None)
+   345→        if not org:
+   346→            return Task.objects.none()
+   347→
+   348→        qs = Task.objects.filter(organization=org, is_deleted=False)
+   349→
+   350→        status_param = self.request.query_params.get('status')
+   351→        if status_param:
+   352→            qs = qs.filter(status=status_param)
+   353→
+   354→        client_param = self.request.query_params.get('client')
+   355→        if client_param:
+   356→            qs = qs.filter(client_id=client_param)
+   357→
+   358→        department_param = self.request.query_params.get('department')
+   359→        if department_param:
+   360→            qs = qs.filter(department_id=department_param)
+   361→
+   362→        responsible_param = self.request.query_params.get('responsible')
+   363→        if responsible_param:
+   364→            qs = qs.filter(
+   365→                assignments__user_id=responsible_param,
+   366→                assignments__is_active=True,
+   367→            ).distinct()
+   368→
+   369→        priority_param = self.request.query_params.get('priority')
+   370→        if priority_param:
+   371→            qs = qs.filter(priority=priority_param)
+   372→
+   373→        origin_param = self.request.query_params.get('origin')
+   374→        if origin_param:
+   375→            qs = qs.filter(origin=origin_param)
+   376→
+   377→        return qs.select_related('client', 'department').prefetch_related(
+   378→            'assignments__user', 'checklist_items',
+   379→        )
+   380→
+   381→    def perform_create(self, serializer):
+   382→        org = getattr(self.request, 'tenant', None)
+   383→        if not org:
+   384→            raise permissions.PermissionDenied('Organização não definida.')
+   385→
+   386→        from apps.radar_tasks.services import TaskService
+   387→        dados = serializer.validated_data.copy()
+   388→        responsible_id = dados.pop('responsible_id', None)
+   389→        checklist_items = dados.pop('checklist_items', None)
+   390→
+   391→        task = TaskService.create_task_avulsa(org, self.request.user, **dados)
+   392→
+   393→        if responsible_id:
+   394→            TaskService.assign_task(task, responsible_id, self.request.user)
+   395→
+   396→        if checklist_items:
+   397→            for idx, item_data in enumerate(checklist_items):
+   398→                titulo = item_data.get('title', '').strip()
+   399→                if titulo:
+   400→                    ChecklistItem(
+   401→                        organization=org,
+   402→                        task=task,
+   403→                        title=titulo,
+   404→                        description=item_data.get('description', ''),
+   405→                        is_required=item_data.get('is_required', True),
+   406→                        display_order=item_data.get('display_order', idx),
+   407→                    ).save()
+   408→
+   409→        serializer.instance = task
+   410→
+   411→    def perform_update(self, serializer):
+   412→        task = serializer.save()
+   413→        from apps.audit.services import AuditService
+   414→        AuditService.log(
+   415→            action='task.updated',
+   416→            target_type='task',
+   417→            target_id=task.uuid,
+   418→            actor=self.request.user,
+   419→            organization=task.organization,
+   420→            metadata={'title': task.title},
+   421→        )
+   422→
+   423→    @action(detail=True, methods=['post'])
+   424→    def start(self, request, pk=None):
+   425→        """Inicia uma tarefa."""
+   426→        task = self.get_object()
+   427→        try:
+   428→            from apps.radar_tasks.services import TaskService
+   429→            TaskService.start_task(task, request.user)
+   430→            return Response(TaskDetailSerializer(task).data)
+   431→        except Exception as exc:
+   432→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   433→
+   434→    @action(detail=True, methods=['post'])
+   435→    def complete(self, request, pk=None):
+   436→        """Conclui uma tarefa."""
+   437→        task = self.get_object()
+   438→        try:
+   439→            from apps.radar_tasks.services import TaskService
+   440→            evidence = request.data.get('evidence')
+   441→            TaskService.complete_task(task, request.user, evidence=evidence)
+   442→            return Response(TaskDetailSerializer(task).data)
+   443→        except Exception as exc:
+   444→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   445→
+   446→    @action(detail=True, methods=['post'])
+   447→    def cancel(self, request, pk=None):
+   448→        """Cancela uma tarefa."""
+   449→        task = self.get_object()
+   450→        serializer = ReopenCancelSerializer(data=request.data)
+   451→        serializer.is_valid(raise_exception=True)
+   452→        try:
+   453→            from apps.radar_tasks.services import TaskService
+   454→            TaskService.cancel_task(task, request.user, serializer.validated_data['reason'])
+   455→            return Response(TaskDetailSerializer(task).data)
+   456→        except Exception as exc:
+   457→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   458→
+   459→    @action(detail=True, methods=['post'])
+   460→    def reopen(self, request, pk=None):
+   461→        """Reabre uma tarefa concluída."""
+   462→        task = self.get_object()
+   463→        serializer = ReopenCancelSerializer(data=request.data)
+   464→        serializer.is_valid(raise_exception=True)
+   465→        try:
+   466→            from apps.radar_tasks.services import TaskService
+   467→            TaskService.reopen_task(task, request.user, serializer.validated_data['reason'])
+   468→            return Response(TaskDetailSerializer(task).data)
+   469→        except Exception as exc:
+   470→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   471→
+   472→    @action(detail=True, methods=['post'])
+   473→    def assign(self, request, pk=None):
+   474→        """Atribui um usuário a uma tarefa."""
+   475→        task = self.get_object()
+   476→        serializer = AssignUserSerializer(data=request.data)
+   477→        serializer.is_valid(raise_exception=True)
+   478→        try:
+   479→            from apps.radar_tasks.services import TaskService
+   480→            assignment = TaskService.assign_task(
+   481→                task,
+   482→                user_id=serializer.validated_data['user_id'],
+   483→                assigned_by=request.user,
+   484→                role=serializer.validated_data.get('role', 'responsavel'),
+   485→            )
+   486→            return Response(TaskAssignmentSerializer(assignment).data, status=http_status.HTTP_201_CREATED)
+   487→        except Exception as exc:
+   488→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   489→
+   490→    @action(detail=True, methods=['post'])
+   491→    def add_comment(self, request, pk=None):
+   492→        """Adiciona comentário a uma tarefa."""
+   493→        task = self.get_object()
+   494→        serializer = CommentCreateSerializer(data=request.data)
+   495→        serializer.is_valid(raise_exception=True)
+   496→        try:
+   497→            from apps.radar_tasks.services import TaskService
+   498→            comment = TaskService.add_comment(
+   499→                task, request.user,
+   500→                body=serializer.validated_data['body'],
+   501→                mentions=serializer.validated_data.get('mentions', []),
+   502→                is_internal=serializer.validated_data.get('is_internal', False),
+   503→            )
+   504→            return Response(TaskCommentSerializer(comment).data, status=http_status.HTTP_201_CREATED)
+   505→        except Exception as exc:
+   506→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   507→
+   508→    @action(detail=True, methods=['post'], url_path='checklist/(?P<item_id>[^/.]+)/toggle')
+   509→    def toggle_checklist(self, request, pk=None, item_id=None):
+   510→        """ Alterna o status de um item de checklist."""
+   511→        task = self.get_object()
+   512→        try:
+   513→            item = ChecklistItem.objects.get(id=item_id, task=task, organization=task.organization)
+   514→            from apps.radar_tasks.services import TaskService
+   515→            updated = TaskService.toggle_checklist_item(item, request.user)
+   516→            return Response(ChecklistItemSerializer(updated).data)
+   517→        except ChecklistItem.DoesNotExist:
+   518→            return Response({'error': 'Item não encontrado.'}, status=http_status.HTTP_404_NOT_FOUND)
+   519→        except Exception as exc:
+   520→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   521→
+   522→    @action(detail=True, methods=['post'])
+   523→    def update_due_date(self, request, pk=None):
+   524→        """Atualiza o prazo de uma tarefa."""
+   525→        task = self.get_object()
+   526→        serializer = UpdateDueDateSerializer(data=request.data)
+   527→        serializer.is_valid(raise_exception=True)
+   528→        try:
+   529→            from apps.radar_tasks.services import TaskService
+   530→            TaskService.update_due_date(
+   531→                task, request.user,
+   532→                new_date=serializer.validated_data['new_due_date'],
+   533→                reason=serializer.validated_data.get('reason', ''),
+   534→            )
+   535→            return Response(TaskDetailSerializer(task).data)
+   536→        except Exception as exc:
+   537→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   538→
+   539→    @action(detail=False, methods=['post'])
+   540→    def bulk_status(self, request):
+   541→        """Atualiza o status de múltiplas tarefas em massa."""
+   542→        serializer = BulkStatusUpdateSerializer(data=request.data)
+   543→        serializer.is_valid(raise_exception=True)
+   544→        try:
+   545→            from apps.radar_tasks.services import TaskService
+   546→            org = getattr(request, 'tenant', None)
+   547→            resultados = TaskService.bulk_update_status(
+   548→                task_ids=[str(tid) for tid in serializer.validated_data['task_ids']],
+   549→                user=request.user,
+   550→                new_status=serializer.validated_data['new_status'],
+   551→                organization=org,
+   552→            )
+   553→            return Response(resultados)
+   554→        except Exception as exc:
+   555→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   556→
+   557→    @action(detail=True, methods=['post'])
+   558→    def follow(self, request, pk=None):
+   559→        """Adiciona o usuário atual como seguidor."""
+   560→        task = self.get_object()
+   561→        try:
+   562→            from apps.radar_tasks.services import TaskService
+   563→            TaskService.add_follower(task, request.user)
+   564→            return Response({'status': 'seguindo'})
+   565→        except Exception as exc:
+   566→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   567→
+   568→    @action(detail=True, methods=['post'])
+   569→    def unfollow(self, request, pk=None):
+   570→        """Remove o usuário atual dos seguidores."""
+   571→        task = self.get_object()
+   572→        try:
+   573→            from apps.radar_tasks.services import TaskService
+   574→            TaskService.remove_follower(task, request.user)
+   575→            return Response({'status': 'deixou_de_seguir'})
+   576→        except Exception as exc:
+   577→            return Response({'error': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST)
+   578→
+   579→    @action(detail=True, methods=['get'])
+   580→    def dependencies(self, request, pk=None):
+   581→        """Retorna as dependências de uma tarefa."""
+   582→        task = self.get_object()
+   583→        from apps.radar_tasks.selectors import TaskSelectors
+   584→        deps = TaskSelectors.get_task_dependencies(task)
+   585→        return Response({
+   586→            'blocks': TaskDependencySerializer(
+   587→                TaskDependency.objects.filter(source_task=task, organization=task.organization),
+   588→                many=True,
+   589→            ).data,
+   590→            'blocked_by': TaskDependencySerializer(
+   591→                TaskDependency.objects.filter(target_task=task, organization=task.organization),
+   592→                many=True,
+   593→            ).data,
+   594→        })
+   595→
+   596→
+   597→class TaskAssignmentViewSet(ModelViewSet):
+   598→    """ViewSet para atribuições de tarefas."""
+   599→
+   600→    serializer_class = TaskAssignmentSerializer
+   601→    permission_classes = [IsAuthenticated]
+   602→
+   603→    def get_queryset(self):
+   604→        org = getattr(self.request, 'tenant', None)
+   605→        if not org:
+   606→            return TaskAssignment.objects.none()
+   607→        return TaskAssignment.objects.filter(organization=org).select_related('user', 'task')
+   608→
+   609→
+   610→class ChecklistItemViewSet(ModelViewSet):
+   611→    """ViewSet para itens de checklist."""
+   612→
+   613→    serializer_class = ChecklistItemSerializer
+   614→    permission_classes = [IsAuthenticated]
+   615→
+   616→    def get_queryset(self):
+   617→        org = getattr(self.request, 'tenant', None)
+   618→        if not org:
+   619→            return ChecklistItem.objects.none()
+   620→        return ChecklistItem.objects.filter(organization=org).select_related('task', 'completed_by')
+   621→
+   622→    def perform_create(self, serializer):
+   623→        org = getattr(self.request, 'tenant', None)
+   624→        if not org:
+   625→            raise permissions.PermissionDenied('Organização não definida.')
+   626→        total = ChecklistItem.objects.filter(task=serializer.validated_data['task']).count()
+   627→        serializer.save(organization=org, display_order=total)
+   628→
+   629→
+   630→class TaskCommentViewSet(ModelViewSet):
+   631→    """ViewSet para comentários de tarefas."""
+   632→
+   633→    serializer_class = TaskCommentSerializer
+   634→    permission_classes = [IsAuthenticated]
+   635→
+   636→    def get_queryset(self):
+   637→        org = getattr(self.request, 'tenant', None)
+   638→        if not org:
+   639→            return TaskComment.objects.none()
+   640→        return TaskComment.objects.filter(organization=org).select_related('author', 'task')
+   641→
+   642→    def perform_create(self, serializer):
+   643→        org = getattr(self.request, 'tenant', None)
+   644→        if not org:
+   645→            raise permissions.PermissionDenied('Organização não definida.')
+   646→        serializer.save(organization=org, author=self.request.user)
+   647→
+   648→
+   649→class TaskDependencyViewSet(ModelViewSet):
+   650→    """ViewSet para dependências entre tarefas."""
+   651→
+   652→    serializer_class = TaskDependencySerializer
+   653→    permission_classes = [IsAuthenticated]
+   654→
+   655→    def get_queryset(self):
+   656→        org = getattr(self.request, 'tenant', None)
+   657→        if not org:
+   658→            return TaskDependency.objects.none()
+   659→        return TaskDependency.objects.filter(organization=org).select_related(
+   660→            'source_task', 'target_task',
+   661→        )
+   662→
+   663→    def perform_create(self, serializer):
+   664→        org = getattr(self.request, 'tenant', None)
+   665→        if not org:
+   666→            raise permissions.PermissionDenied('Organização não definida.')
+   667→        serializer.save(organization=org)
+   668→
+   669→
+   670→class TaskFollowerViewSet(ModelViewSet):
+   671→    """ViewSet para seguidores de tarefas."""
+   672→
+   673→    serializer_class = TaskFollowerSerializer
+   674→    permission_classes = [IsAuthenticated]
+   675→
+   676→    def get_queryset(self):
+   677→        org = getattr(self.request, 'tenant', None)
+   678→        if not org:
+   679→            return TaskFollower.objects.none()
+   680→        return TaskFollower.objects.filter(organization=org).select_related('user', 'task')
+   681→
+   682→
+   683→class RecurrenceRuleViewSet(ModelViewSet):
+   684→    """ViewSet para regras de recorrência."""
+   685→
+   686→    serializer_class = RecurrenceRuleSerializer
+   687→    permission_classes = [IsAuthenticated]
+   688→    filter_backends = [filters.OrderingFilter]
+   689→    ordering_fields = ['start_date', 'frequency', 'is_active']
+   690→
+   691→    def get_queryset(self):
+   692→        org = getattr(self.request, 'tenant', None)
+   693→        if not org:
+   694→            return RecurrenceRule.objects.none()
+   695→        return RecurrenceRule.objects.filter(organization=org)
+   696→
+   697→    def perform_create(self, serializer):
+   698→        org = getattr(self.request, 'tenant', None)
+   699→        if not org:
+   700→            raise permissions.PermissionDenied('Organização não definida.')
+   701→        serializer.save(organization=org)
+   702→
+   703→
+   704→class SavedFilterViewSet(ModelViewSet):
+   705→    """ViewSet para filtros salvos."""
+   706→
+   707→    serializer_class = SavedFilterSerializer
+   708→    permission_classes = [IsAuthenticated]
+   709→
+   710→    def get_queryset(self):
+   711→        org = getattr(self.request, 'tenant', None)
+   712→        if not org:
+   713→            return SavedFilter.objects.none()
+   714→        return SavedFilter.objects.filter(organization=org, user=self.request.user)
+   715→
+   716→    def perform_create(self, serializer):
+   717→        org = getattr(self.request, 'tenant', None)
+   718→        if not org:
+   719→            raise permissions.PermissionDenied('Organização não definida.')
+   720→        serializer.save(organization=org, user=self.request.user)
+   721→

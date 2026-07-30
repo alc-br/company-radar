@@ -1,0 +1,797 @@
+     1→from rest_framework import serializers
+     2→from rest_framework import viewsets, permissions, filters, status
+     3→from rest_framework.permissions import IsAuthenticated
+     4→from rest_framework.decorators import action
+     5→from rest_framework.response import Response
+     6→from django.db.models import Count
+     7→
+     8→from apps.radar_templates.models import (
+     9→    Template,
+    10→    TemplateVersion,
+    11→    TemplateVariable,
+    12→    TemplateStage,
+    13→    TemplateTask,
+    14→    TemplateChecklistItem,
+    15→    TemplateDocumentRequirement,
+    16→    TemplateDependency,
+    17→    TemplateApplication,
+    18→    DateRuleType,
+    19→    TaskPriority,
+    20→    RecurrenceFrequency,
+    21→    WeekendPolicy,
+    22→    TemplateStatus,
+    23→)
+    24→from apps.radar_templates.services import TemplateService
+    25→from apps.radar_templates.selectors import TemplateSelectors
+    26→
+    27→
+    28→# ── Checklist / Documentos ─────────────────────────────────────
+    29→
+    30→
+    31→class TemplateChecklistItemSerializer(serializers.ModelSerializer):
+    32→    class Meta:
+    33→        model = TemplateChecklistItem
+    34→        fields = (
+    35→            'id', 'uuid', 'template_task', 'title', 'description',
+    36→            'is_required', 'display_order', 'created_at', 'updated_at',
+    37→        )
+    38→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+    39→
+    40→
+    41→class TemplateDocumentRequirementSerializer(serializers.ModelSerializer):
+    42→    class Meta:
+    43→        model = TemplateDocumentRequirement
+    44→        fields = (
+    45→            'id', 'uuid', 'template_task', 'document_type', 'description',
+    46→            'is_required', 'accepted_formats', 'max_size_mb', 'display_order',
+    47→            'created_at', 'updated_at',
+    48→        )
+    49→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+    50→
+    51→
+    52→# ── Tarefa ─────────────────────────────────────────────────────
+    53→
+    54→
+    55→class TemplateTaskSerializer(serializers.ModelSerializer):
+    56→    checklist_items = TemplateChecklistItemSerializer(many=True, read_only=True)
+    57→    document_requirements = TemplateDocumentRequirementSerializer(many=True, read_only=True)
+    58→    date_rule_type_display = serializers.CharField(
+    59→        source='get_date_rule_type_display', read_only=True,
+    60→    )
+    61→    priority_display = serializers.CharField(
+    62→        source='get_priority_display', read_only=True,
+    63→    )
+    64→    recurrence_frequency_display = serializers.CharField(
+    65→        source='get_recurrence_frequency_display', read_only=True,
+    66→    )
+    67→    recurrence_weekend_policy_display = serializers.CharField(
+    68→        source='get_recurrence_weekend_policy_display', read_only=True,
+    69→    )
+    70→    stage_name = serializers.CharField(source='stage.name', read_only=True)
+    71→    responsible_department_name = serializers.CharField(
+    72→        source='responsible_department.name', read_only=True, default=None,
+    73→    )
+    74→    reviewer_name = serializers.CharField(
+    75→        source='reviewer.get_full_name', read_only=True, default=None,
+    76→    )
+    77→    depends_on_title = serializers.CharField(
+    78→        source='date_rule_depends_on.title', read_only=True, default=None,
+    79→    )
+    80→
+    81→    class Meta:
+    82→        model = TemplateTask
+    83→        fields = (
+    84→            'id', 'uuid', 'stage', 'stage_name', 'title', 'description',
+    85→            'category', 'priority', 'priority_display',
+    86→            'responsible_department', 'responsible_department_name',
+    87→            'responsible_role', 'reviewer', 'reviewer_name',
+    88→            'date_rule_type', 'date_rule_type_display',
+    89→            'date_rule_offset', 'date_rule_day', 'date_rule_weekday',
+    90→            'date_rule_variable', 'date_rule_depends_on', 'depends_on_title',
+    91→            'estimated_duration',
+    92→            'has_recurrence', 'recurrence_frequency', 'recurrence_frequency_display',
+    93→            'recurrence_start', 'recurrence_end', 'recurrence_max_occurrences',
+    94→            'recurrence_weekend_policy', 'recurrence_weekend_policy_display',
+    95→            'recurrence_advance_days',
+    96→            'initial_status', 'is_optional', 'is_visible_in_portal',
+    97→            'portal_instructions', 'team_instructions',
+    98→            'reminder_days', 'display_order',
+    99→            'checklist_items', 'document_requirements',
+   100→            'created_at', 'updated_at',
+   101→        )
+   102→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+   103→
+   104→
+   105→class TemplateTaskCreateUpdateSerializer(serializers.ModelSerializer):
+   106→    class Meta:
+   107→        model = TemplateTask
+   108→        fields = (
+   109→            'stage', 'title', 'description', 'category', 'priority',
+   110→            'responsible_department', 'responsible_role', 'reviewer',
+   111→            'date_rule_type', 'date_rule_offset', 'date_rule_day',
+   112→            'date_rule_weekday', 'date_rule_variable', 'date_rule_depends_on',
+   113→            'estimated_duration', 'has_recurrence', 'recurrence_frequency',
+   114→            'recurrence_start', 'recurrence_end', 'recurrence_max_occurrences',
+   115→            'recurrence_weekend_policy', 'recurrence_advance_days',
+   116→            'initial_status', 'is_optional', 'is_visible_in_portal',
+   117→            'portal_instructions', 'team_instructions',
+   118→            'reminder_days', 'display_order',
+   119→        )
+   120→
+   121→
+   122→# ── Etapa ──────────────────────────────────────────────────────
+   123→
+   124→
+   125→class TemplateStageSerializer(serializers.ModelSerializer):
+   126→    tasks = TemplateTaskSerializer(many=True, read_only=True)
+   127→    task_count = serializers.SerializerMethodField()
+   128→
+   129→    class Meta:
+   130→        model = TemplateStage
+   131→        fields = (
+   132→            'id', 'uuid', 'version', 'name', 'description',
+   133→            'display_order', 'condition_manual', 'tasks', 'task_count',
+   134→            'created_at', 'updated_at',
+   135→        )
+   136→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+   137→
+   138→    def get_task_count(self, obj):
+   139→        if hasattr(obj, '_task_count'):
+   140→            return obj._task_count
+   141→        return obj.tasks.count()
+   142→
+   143→
+   144→class TemplateStageCreateUpdateSerializer(serializers.ModelSerializer):
+   145→    class Meta:
+   146→        model = TemplateStage
+   147→        fields = ('version', 'name', 'description', 'display_order', 'condition_manual')
+   148→
+   149→
+   150→# ── Variável ───────────────────────────────────────────────────
+   151→
+   152→
+   153→class TemplateVariableSerializer(serializers.ModelSerializer):
+   154→    class Meta:
+   155→        model = TemplateVariable
+   156→        fields = (
+   157→            'id', 'uuid', 'version', 'name', 'code', 'var_type',
+   158→            'default_value', 'is_required', 'description', 'display_order',
+   159→            'created_at', 'updated_at',
+   160→        )
+   161→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+   162→
+   163→
+   164→class TemplateVariableCreateUpdateSerializer(serializers.ModelSerializer):
+   165→    class Meta:
+   166→        model = TemplateVariable
+   167→        fields = (
+   168→            'version', 'name', 'code', 'var_type',
+   169→            'default_value', 'is_required', 'description', 'display_order',
+   170→        )
+   171→
+   172→
+   173→# ── Dependência ────────────────────────────────────────────────
+   174→
+   175→
+   176→class TemplateDependencySerializer(serializers.ModelSerializer):
+   177→    source_task_title = serializers.CharField(source='source_task.title', read_only=True)
+   178→    target_task_title = serializers.CharField(source='target_task.title', read_only=True)
+   179→
+   180→    class Meta:
+   181→        model = TemplateDependency
+   182→        fields = (
+   183→            'id', 'uuid', 'version', 'source_task', 'source_task_title',
+   184→            'target_task', 'target_task_title', 'created_at', 'updated_at',
+   185→        )
+   186→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+   187→
+   188→
+   189→class TemplateDependencyCreateSerializer(serializers.ModelSerializer):
+   190→    class Meta:
+   191→        model = TemplateDependency
+   192→        fields = ('version', 'source_task', 'target_task')
+   193→
+   194→
+   195→# ── Versão ─────────────────────────────────────────────────────
+   196→
+   197→
+   198→class TemplateVersionSerializer(serializers.ModelSerializer):
+   199→    stages_count = serializers.SerializerMethodField()
+   200→    tasks_count = serializers.SerializerMethodField()
+   201→    status_label = serializers.SerializerMethodField()
+   202→
+   203→    class Meta:
+   204→        model = TemplateVersion
+   205→        fields = (
+   206→            'id', 'uuid', 'template', 'version_number', 'name', 'notes',
+   207→            'is_published', 'published_at', 'published_by',
+   208→            'stages_count', 'tasks_count', 'status_label',
+   209→            'created_at', 'updated_at',
+   210→        )
+   211→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+   212→
+   213→    def get_stages_count(self, obj):
+   214→        if hasattr(obj, '_stages_count'):
+   215→            return obj._stages_count
+   216→        return obj.stages.count()
+   217→
+   218→    def get_tasks_count(self, obj):
+   219→        if hasattr(obj, '_tasks_count'):
+   220→            return obj._tasks_count
+   221→        return TemplateTask.objects.filter(stage__version=obj).count()
+   222→
+   223→    def get_status_label(self, obj):
+   224→        return 'Publicado' if obj.is_published else 'Rascunho'
+   225→
+   226→
+   227→class TemplateVersionDetailSerializer(serializers.ModelSerializer):
+   228→    """Árvore completa: stages -> tasks -> checklist_items / document_requirements."""
+   229→    stages = TemplateStageSerializer(many=True, read_only=True)
+   230→    variables = TemplateVariableSerializer(many=True, read_only=True)
+   231→    dependencies = TemplateDependencySerializer(many=True, read_only=True)
+   232→    template_name = serializers.CharField(source='template.name', read_only=True)
+   233→    published_by_name = serializers.CharField(
+   234→        source='published_by.get_full_name', read_only=True, default=None,
+   235→    )
+   236→
+   237→    class Meta:
+   238→        model = TemplateVersion
+   239→        fields = (
+   240→            'id', 'uuid', 'template', 'template_name',
+   241→            'version_number', 'name', 'notes',
+   242→            'is_published', 'published_at', 'published_by', 'published_by_name',
+   243→            'stages', 'variables', 'dependencies',
+   244→            'created_at', 'updated_at',
+   245→        )
+   246→        read_only_fields = fields
+   247→
+   248→
+   249→class TemplateVersionCreateSerializer(serializers.ModelSerializer):
+   250→    class Meta:
+   251→        model = TemplateVersion
+   252→        fields = ('template', 'name', 'notes')
+   253→
+   254→
+   255→# ── Template ───────────────────────────────────────────────────
+   256→
+   257→
+   258→class TemplateListSerializer(serializers.ModelSerializer):
+   259→    status_display = serializers.CharField(source='get_status_display', read_only=True)
+   260→    versions_count = serializers.SerializerMethodField()
+   261→    published_version = serializers.SerializerMethodField()
+   262→    responsible_name = serializers.CharField(
+   263→        source='responsible.get_full_name', read_only=True, default=None,
+   264→    )
+   265→
+   266→    class Meta:
+   267→        model = Template
+   268→        fields = (
+   269→            'id', 'uuid', 'name', 'code', 'category', 'color', 'icon',
+   270→            'status', 'status_display', 'current_version', 'use_count',
+   271→            'versions_count', 'published_version', 'responsible', 'responsible_name',
+   272→            'created_at', 'updated_at',
+   273→        )
+   274→        read_only_fields = fields
+   275→
+   276→    def get_versions_count(self, obj):
+   277→        if hasattr(obj, '_versions_count'):
+   278→            return obj._versions_count
+   279→        return obj.versions.count()
+   280→
+   281→    def get_published_version(self, obj):
+   282→        published = obj.versions.filter(is_published=True).order_by('-version_number').first()
+   283→        if published:
+   284→            return {
+   285→                'uuid': str(published.uuid),
+   286→                'version_number': published.version_number,
+   287→                'published_at': published.published_at,
+   288→            }
+   289→        return None
+   290→
+   291→
+   292→class TemplateDetailSerializer(serializers.ModelSerializer):
+   293→    """Template completo com contagem de versões."""
+   294→    status_display = serializers.CharField(source='get_status_display', read_only=True)
+   295→    versions = TemplateVersionSerializer(many=True, read_only=True)
+   296→    versions_count = serializers.SerializerMethodField()
+   297→    published_version = serializers.SerializerMethodField()
+   298→    responsible_name = serializers.CharField(
+   299→        source='responsible.get_full_name', read_only=True, default=None,
+   300→    )
+   301→    default_periodicity_display = serializers.CharField(
+   302→        source='get_default_periodicity_display', read_only=True, default=None,
+   303→    )
+   304→
+   305→    class Meta:
+   306→        model = Template
+   307→        fields = (
+   308→            'id', 'uuid', 'name', 'code', 'description', 'purpose',
+   309→            'category', 'color', 'icon',
+   310→            'responsible', 'responsible_name',
+   311→            'instructions', 'warning',
+   312→            'default_periodicity', 'default_periodicity_display',
+   313→            'status', 'status_display', 'current_version', 'use_count',
+   314→            'versions', 'versions_count', 'published_version',
+   315→            'is_deleted', 'deleted_at',
+   316→            'created_at', 'updated_at',
+   317→        )
+   318→        read_only_fields = (
+   319→            'id', 'uuid', 'is_deleted', 'deleted_at', 'created_at', 'updated_at',
+   320→        )
+   321→
+   322→    def get_versions_count(self, obj):
+   323→        if hasattr(obj, '_versions_count'):
+   324→            return obj._versions_count
+   325→        return obj.versions.count()
+   326→
+   327→    def get_published_version(self, obj):
+   328→        published = obj.versions.filter(is_published=True).order_by('-version_number').first()
+   329→        if published:
+   330→            return {
+   331→                'uuid': str(published.uuid),
+   332→                'version_number': published.version_number,
+   333→                'published_at': published.published_at,
+   334→            }
+   335→        return None
+   336→
+   337→
+   338→class TemplateCreateSerializer(serializers.ModelSerializer):
+   339→    class Meta:
+   340→        model = Template
+   341→        fields = (
+   342→            'name', 'code', 'description', 'purpose', 'category',
+   343→            'color', 'icon', 'responsible', 'instructions', 'warning',
+   344→            'default_periodicity',
+   345→        )
+   346→
+   347→
+   348→class TemplateUpdateSerializer(serializers.ModelSerializer):
+   349→    class Meta:
+   350→        model = Template
+   351→        fields = (
+   352→            'name', 'code', 'description', 'purpose', 'category',
+   353→            'color', 'icon', 'responsible', 'instructions', 'warning',
+   354→            'default_periodicity',
+   355→        )
+   356→
+   357→
+   358→# ── Aplicação ──────────────────────────────────────────────────
+   359→
+   360→
+   361→class TemplateApplicationSerializer(serializers.ModelSerializer):
+   362→    template_name = serializers.CharField(
+   363→        source='version.template.name', read_only=True,
+   364→    )
+   365→    version_number = serializers.IntegerField(source='version.version_number', read_only=True)
+   366→    client_name = serializers.SerializerMethodField()
+   367→    applied_by_name = serializers.CharField(
+   368→        source='applied_by.get_full_name', read_only=True, default=None,
+   369→    )
+   370→
+   371→    class Meta:
+   372→        model = TemplateApplication
+   373→        fields = (
+   374→            'id', 'uuid', 'client', 'client_name', 'version', 'version_number',
+   375→            'template_name', 'applied_by', 'applied_by_name',
+   376→            'base_date', 'variables', 'responsible_mapping', 'status',
+   377→            'total_stages', 'total_tasks', 'total_checklists', 'total_documents',
+   378→            'first_due_date', 'last_due_date',
+   379→            'created_at', 'updated_at',
+   380→        )
+   381→        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+   382→
+   383→    def get_client_name(self, obj):
+   384→        if hasattr(obj, '_client_name'):
+   385→            return obj._client_name
+   386→        return obj.client.nome_fantasia or obj.client.razao_social
+   387→
+   388→
+   389→class TemplateApplyRequestSerializer(serializers.Serializer):
+   390→    """Payload para aplicar um template a um cliente."""
+   391→    client_uuid = serializers.UUIDField(write_only=True)
+   392→    base_date = serializers.DateField(write_only=True)
+   393→    variables = serializers.JSONField(required=False, default=dict)
+   394→    responsible_mapping = serializers.JSONField(required=False, default=dict)
+   395→
+   396→    def validate_client_uuid(self, value):
+   397→        org = self.context.get('organization')
+   398→        if not org:
+   399→            return value
+   400→        from apps.clients.models import ClientCompany
+   401→        try:
+   402→            return ClientCompany.objects.get(uuid=value, organization=org, is_deleted=False)
+   403→        except ClientCompany.DoesNotExist:
+   404→            raise serializers.ValidationError('Cliente não encontrado.')
+   405→
+   406→
+   407→# ── ViewSets ────────────────────────────────────────────────────
+   408→
+   409→
+   410→class TemplateViewSet(viewsets.ModelViewSet):
+   411→    """ViewSet para Templates Operacionais."""
+   412→
+   413→    permission_classes = [IsAuthenticated]
+   414→    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+   415→    search_fields = ['name', 'code', 'description']
+   416→    ordering_fields = ['name', 'created_at', 'use_count', 'current_version']
+   417→    lookup_field = 'uuid'
+   418→
+   419→    def get_serializer_class(self):
+   420→        if self.action == 'list':
+   421→            return TemplateListSerializer
+   422→        if self.action == 'create':
+   423→            return TemplateCreateSerializer
+   424→        if self.action in ('update', 'partial_update'):
+   425→            return TemplateUpdateSerializer
+   426→        if self.action in ('publish', 'duplicate', 'apply'):
+   427→            return TemplateDetailSerializer
+   428→        return TemplateDetailSerializer
+   429→
+   430→    def get_queryset(self):
+   431→        org = getattr(self.request, 'tenant', None)
+   432→        if not org:
+   433→            return Template.objects.none()
+   434→        return Template.objects.filter(
+   435→            organization=org, is_deleted=False,
+   436→        ).prefetch_related(
+   437→            'versions',
+   438→        ).annotate(
+   439→            _versions_count=Count('versions'),
+   440→        )
+   441→
+   442→    def perform_create(self, serializer):
+   443→        org = getattr(self.request, 'tenant', None)
+   444→        if not org:
+   445→            raise permissions.PermissionDenied('Organização não definida.')
+   446→        dados = serializer.validated_data.copy()
+   447→        template = TemplateService.create_template(org, self.request.user, **dados)
+   448→        serializer.instance = template
+   449→
+   450→    def perform_update(self, serializer):
+   451→        dados = serializer.validated_data.copy()
+   452→        dados['_actor'] = self.request.user
+   453→        template = TemplateService.update_template(serializer.instance, **dados)
+   454→        serializer.instance = template
+   455→
+   456→    def perform_destroy(self, instance):
+   457→        instance.soft_delete()
+   458→
+   459→    @action(detail=True, methods=['post'])
+   460→    def publish(self, request, uuid=None):
+   461→        """Publica o rascunho mais recente do template."""
+   462→        template = self.get_object()
+   463→        draft = template.versions.filter(is_published=False).order_by('-version_number').first()
+   464→        if not draft:
+   465→            return Response(
+   466→                {'error': 'Nenhum rascunho encontrado para publicar.'},
+   467→                status=status.HTTP_400_BAD_REQUEST,
+   468→            )
+   469→        try:
+   470→            published = TemplateService.publish_version(draft, request.user)
+   471→            out = TemplateVersionSerializer(published)
+   472→            return Response(out.data)
+   473→        except Exception as exc:
+   474→            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+   475→
+   476→    @action(detail=True, methods=['post'])
+   477→    def duplicate(self, request, uuid=None):
+   478→        """Duplica o template."""
+   479→        template = self.get_object()
+   480→        new_name = request.data.get('name')
+   481→        try:
+   482→            new_template = TemplateService.duplicate_template(
+   483→                template, request.user, new_name=new_name,
+   484→            )
+   485→            out = TemplateDetailSerializer(new_template)
+   486→            return Response(out.data, status=status.HTTP_201_CREATED)
+   487→        except Exception as exc:
+   488→            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+   489→
+   490→    @action(detail=True, methods=['post'])
+   491→    def apply(self, request, uuid=None):
+   492→        """Aplica o template a um cliente."""
+   493→        template = self.get_object()
+   494→        org = getattr(request, 'tenant', None)
+   495→        published = TemplateSelectors.get_published_version(template)
+   496→        if not published:
+   497→            return Response(
+   498→                {'error': 'Nenhuma versão publicada disponível.'},
+   499→                status=status.HTTP_400_BAD_REQUEST,
+   500→            )
+   501→        serializer = TemplateApplyRequestSerializer(
+   502→            data=request.data,
+   503→            context={'organization': org},
+   504→        )
+   505→        serializer.is_valid(raise_exception=True)
+   506→        try:
+   507→            client = serializer.validated_data['client_uuid']
+   508→            application = TemplateService.apply_template(
+   509→                version=published,
+   510→                client=client,
+   511→                user=request.user,
+   512→                base_date=serializer.validated_data['base_date'],
+   513→                variables=serializer.validated_data.get('variables', {}),
+   514→                responsible_mapping=serializer.validated_data.get('responsible_mapping', {}),
+   515→            )
+   516→            out = TemplateApplicationSerializer(application)
+   517→            return Response(out.data, status=status.HTTP_201_CREATED)
+   518→        except Exception as exc:
+   519→            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+   520→
+   521→    @action(detail=False, methods=['get'])
+   522→    def categories(self, request):
+   523→        """Lista categorias disponíveis."""
+   524→        org = getattr(request, 'tenant', None)
+   525→        if not org:
+   526→            return Response([])
+   527→        categories = TemplateSelectors.get_categories(org)
+   528→        return Response(categories)
+   529→
+   530→
+   531→class TemplateVersionViewSet(viewsets.ModelViewSet):
+   532→    """ViewSet para versões de template."""
+   533→
+   534→    permission_classes = [IsAuthenticated]
+   535→    filter_backends = [filters.OrderingFilter]
+   536→    ordering_fields = ['version_number', 'created_at']
+   537→    lookup_field = 'uuid'
+   538→
+   539→    def get_serializer_class(self):
+   540→        if self.action == 'list':
+   541→            return TemplateVersionSerializer
+   542→        if self.action == 'create':
+   543→            return TemplateVersionCreateSerializer
+   544→        if self.action == 'tree':
+   545→            return TemplateVersionDetailSerializer
+   546→        return TemplateVersionDetailSerializer
+   547→
+   548→    def get_queryset(self):
+   549→        org = getattr(self.request, 'tenant', None)
+   550→        if not org:
+   551→            return TemplateVersion.objects.none()
+   552→        return TemplateVersion.objects.filter(
+   553→            organization=org,
+   554→        ).annotate(
+   555→            _stages_count=Count('stages'),
+   556→        ).select_related('template', 'published_by')
+   557→
+   558→    def perform_create(self, serializer):
+   559→        org = getattr(self.request, 'tenant', None)
+   560→        if not org:
+   561→            raise permissions.PermissionDenied('Organização não definida.')
+   562→        template_id = self.request.data.get('template')
+   563→        if not template_id:
+   564→            raise serializers.ValidationError({'template': ['template é obrigatório.']})
+   565→        try:
+   566→            template = Template.objects.get(id=template_id, organization=org, is_deleted=False)
+   567→        except Template.DoesNotExist:
+   568→            raise serializers.ValidationError({'template': ['Template não encontrado.']})
+   569→        version = TemplateService.create_version_draft(template, self.request.user)
+   570→        serializer.instance = version
+   571→
+   572→    @action(detail=True, methods=['get'])
+   573→    def tree(self, request, uuid=None):
+   574→        """Retorna a árvore completa da versão."""
+   575→        version = self.get_object()
+   576→        full = TemplateSelectors.get_version_with_full_tree(version.id)
+   577→        if not full:
+   578→            return Response({'error': 'Versão não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+   579→        out = TemplateVersionDetailSerializer(full)
+   580→        return Response(out.data)
+   581→
+   582→    @action(detail=True, methods=['get'])
+   583→    def compare(self, request, uuid=None):
+   584→        """Compara esta versão com outra."""
+   585→        version = self.get_object()
+   586→        other_uuid = request.query_params.get('other')
+   587→        if not other_uuid:
+   588→            return Response({'error': 'Parâmetro ?other=<uuid> é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+   589→        try:
+   590→            other = TemplateVersion.objects.get(uuid=other_uuid, organization=version.organization)
+   591→        except TemplateVersion.DoesNotExist:
+   592→            return Response({'error': 'Versão de comparação não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+   593→        result = TemplateSelectors.compare_versions(version.id, other.id)
+   594→        return Response(result)
+   595→
+   596→
+   597→class TemplateStageViewSet(viewsets.ModelViewSet):
+   598→    """ViewSet para etapas de template."""
+   599→
+   600→    permission_classes = [IsAuthenticated]
+   601→    filter_backends = [filters.OrderingFilter]
+   602→    ordering_fields = ['display_order', 'name', 'created_at']
+   603→    lookup_field = 'uuid'
+   604→
+   605→    def get_serializer_class(self):
+   606→        if self.action == 'create':
+   607→            return TemplateStageCreateUpdateSerializer
+   608→        if self.action in ('update', 'partial_update'):
+   609→            return TemplateStageCreateUpdateSerializer
+   610→        return TemplateStageSerializer
+   611→
+   612→    def get_queryset(self):
+   613→        org = getattr(self.request, 'tenant', None)
+   614→        if not org:
+   615→            return TemplateStage.objects.none()
+   616→        return TemplateStage.objects.filter(
+   617→            organization=org,
+   618→        ).annotate(
+   619→            _task_count=Count('tasks'),
+   620→        ).select_related('version__template').order_by('display_order')
+   621→
+   622→    def perform_create(self, serializer):
+   623→        org = getattr(self.request, 'tenant', None)
+   624→        if not org:
+   625→            raise permissions.PermissionDenied('Organização não definida.')
+   626→        data = serializer.validated_data
+   627→        data['organization'] = org
+   628→        stage = TemplateStage(**data)
+   629→        stage.full_clean()
+   630→        stage.save()
+   631→        serializer.instance = stage
+   632→
+   633→    def perform_destroy(self, instance):
+   634→        TemplateService.delete_template_stage(instance)
+   635→
+   636→
+   637→class TemplateTaskViewSet(viewsets.ModelViewSet):
+   638→    """ViewSet para tarefas de template."""
+   639→
+   640→    permission_classes = [IsAuthenticated]
+   641→    filter_backends = [filters.OrderingFilter]
+   642→    ordering_fields = ['display_order', 'title', 'priority']
+   643→    lookup_field = 'uuid'
+   644→
+   645→    def get_serializer_class(self):
+   646→        if self.action in ('create', 'update', 'partial_update'):
+   647→            return TemplateTaskCreateUpdateSerializer
+   648→        return TemplateTaskSerializer
+   649→
+   650→    def get_queryset(self):
+   651→        org = getattr(self.request, 'tenant', None)
+   652→        if not org:
+   653→            return TemplateTask.objects.none()
+   654→        return TemplateTask.objects.filter(
+   655→            organization=org,
+   656→        ).select_related(
+   657→            'stage__version__template', 'responsible_department', 'reviewer',
+   658→            'date_rule_depends_on',
+   659→        ).order_by('display_order')
+   660→
+   661→    def perform_create(self, serializer):
+   662→        org = getattr(self.request, 'tenant', None)
+   663→        if not org:
+   664→            raise permissions.PermissionDenied('Organização não definida.')
+   665→        data = serializer.validated_data
+   666→        data['organization'] = org
+   667→        task = TemplateTask(**data)
+   668→        task.full_clean()
+   669→        task.save()
+   670→        serializer.instance = task
+   671→
+   672→    def perform_update(self, serializer):
+   673→        dados = serializer.validated_data.copy()
+   674→        dados['_actor'] = self.request.user
+   675→        task = TemplateService.update_template_task(serializer.instance, **dados)
+   676→        serializer.instance = task
+   677→
+   678→
+   679→class TemplateChecklistItemViewSet(viewsets.ModelViewSet):
+   680→    """ViewSet para itens de checklist de template."""
+   681→
+   682→    permission_classes = [IsAuthenticated]
+   683→    filter_backends = [filters.OrderingFilter]
+   684→    ordering_fields = ['display_order', 'title']
+   685→    lookup_field = 'uuid'
+   686→
+   687→    def get_serializer_class(self):
+   688→        return TemplateChecklistItemSerializer
+   689→
+   690→    def get_queryset(self):
+   691→        org = getattr(self.request, 'tenant', None)
+   692→        if not org:
+   693→            return TemplateChecklistItem.objects.none()
+   694→        return TemplateChecklistItem.objects.filter(
+   695→            organization=org,
+   696→        ).select_related('template_task__stage__version__template').order_by('display_order')
+   697→
+   698→    def perform_create(self, serializer):
+   699→        org = getattr(self.request, 'tenant', None)
+   700→        if not org:
+   701→            raise permissions.PermissionDenied('Organização não definida.')
+   702→        data = serializer.validated_data
+   703→        data['organization'] = org
+   704→        item = TemplateChecklistItem(**data)
+   705→        item.full_clean()
+   706→        item.save()
+   707→        serializer.instance = item
+   708→
+   709→
+   710→class TemplateDocumentRequirementViewSet(viewsets.ModelViewSet):
+   711→    """ViewSet para requisitos de documento de template."""
+   712→
+   713→    permission_classes = [IsAuthenticated]
+   714→    filter_backends = [filters.OrderingFilter]
+   715→    ordering_fields = ['display_order', 'document_type']
+   716→    lookup_field = 'uuid'
+   717→
+   718→    def get_serializer_class(self):
+   719→        return TemplateDocumentRequirementSerializer
+   720→
+   721→    def get_queryset(self):
+   722→        org = getattr(self.request, 'tenant', None)
+   723→        if not org:
+   724→            return TemplateDocumentRequirement.objects.none()
+   725→        return TemplateDocumentRequirement.objects.filter(
+   726→            organization=org,
+   727→        ).select_related('template_task__stage__version__template').order_by('display_order')
+   728→
+   729→    def perform_create(self, serializer):
+   730→        org = getattr(self.request, 'tenant', None)
+   731→        if not org:
+   732→            raise permissions.PermissionDenied('Organização não definida.')
+   733→        data = serializer.validated_data
+   734→        data['organization'] = org
+   735→        req = TemplateDocumentRequirement(**data)
+   736→        req.full_clean()
+   737→        req.save()
+   738→        serializer.instance = req
+   739→
+   740→
+   741→class TemplateApplicationViewSet(viewsets.ModelViewSet):
+   742→    """ViewSet para aplicações de template."""
+   743→
+   744→    permission_classes = [IsAuthenticated]
+   745→    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+   746→    search_fields = ['client__razao_social', 'client__nome_fantasia', 'version__template__name']
+   747→    ordering_fields = ['created_at', 'base_date', 'first_due_date']
+   748→    lookup_field = 'uuid'
+   749→
+   750→    def get_serializer_class(self):
+   751→        if self.action == 'apply':
+   752→            return TemplateApplyRequestSerializer
+   753→        return TemplateApplicationSerializer
+   754→
+   755→    def get_queryset(self):
+   756→        org = getattr(self.request, 'tenant', None)
+   757→        if not org:
+   758→            return TemplateApplication.objects.none()
+   759→        return TemplateApplication.objects.filter(
+   760→            organization=org,
+   761→        ).select_related(
+   762→            'client', 'version__template', 'applied_by',
+   763→        )
+   764→
+   765→    @action(detail=False, methods=['post'])
+   766→    def apply(self, request):
+   767→        """Aplica um template a um cliente (endpoint independente)."""
+   768→        org = getattr(request, 'tenant', None)
+   769→        if not org:
+   770→            raise permissions.PermissionDenied('Organização não definida.')
+   771→        serializer = TemplateApplyRequestSerializer(
+   772→            data=request.data,
+   773→            context={'organization': org},
+   774→        )
+   775→        serializer.is_valid(raise_exception=True)
+   776→        version_uuid = request.data.get('version_uuid')
+   777→        if not version_uuid:
+   778→            raise serializers.ValidationError({'version_uuid': ['version_uuid é obrigatório.']})
+   779→        version = TemplateSelectors.get_version_by_uuid(str(version_uuid), org)
+   780→        if not version or not version.is_published:
+   781→            raise serializers.ValidationError({'version_uuid': ['Versão não encontrada ou não publicada.']})
+   782→        try:
+   783→            client = serializer.validated_data['client_uuid']
+   784→            application = TemplateService.apply_template(
+   785→                version=version,
+   786→                client=client,
+   787→                user=request.user,
+   788→                base_date=serializer.validated_data['base_date'],
+   789→                variables=serializer.validated_data.get('variables', {}),
+   790→                responsible_mapping=serializer.validated_data.get('responsible_mapping', {}),
+   791→            )
+   792→            out = TemplateApplicationSerializer(application)
+   793→            return Response(out.data, status=status.HTTP_201_CREATED)
+   794→        except Exception as exc:
+   795→            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+   796→
+   797→

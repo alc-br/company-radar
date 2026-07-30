@@ -1,0 +1,1288 @@
+     1→     1→     1→# Company Radar
+     2→     2→     2→
+     3→     3→     3→## Especificação funcional e técnica completa do MVP vendável
+     4→     4→     4→
+     5→     5→     5→**Versão:** 1.0  
+     6→     6→     6→**Data:** 30 de julho de 2026  
+     7→     7→     7→**Público inicial:** escritórios contábeis  
+     8→     8→     8→**Base obrigatória:** Company Core  
+     9→     9→     9→**Produto:** SaaS multitenant de padronização operacional e controle de prazos
+    10→    10→    10→
+    11→    11→    11→---
+    12→    12→    12→
+    13→    13→    13→## 1. Decisão fundamental e instrução obrigatória
+    14→    14→    14→
+    15→    15→    15→> **REQUISITO OBRIGATÓRIO E NÃO NEGOCIÁVEL:** o desenvolvimento do Company Radar deve começar clonando o repositório existente:
+    16→    16→    16→>
+    17→    17→    17→> `git clone https://github.com/alc-br/company-core.git`
+    18→    18→    18→>
+    19→    19→    19→> O agente não deve criar outro projeto do zero, substituir a fundação nem reconstruir autenticação, organizações, permissões, planos, cobranças, cotas, notificações, auditoria, armazenamento, API, filas ou infraestrutura já disponíveis no Company Core.
+    20→    20→    20→
+    21→    21→    21→Depois do clone:
+    22→    22→    22→
+    23→    23→    23→1. entrar em `company-core`;
+    24→    24→    24→2. criar branch própria de desenvolvimento;
+    25→    25→    25→3. instalar as dependências conforme o `README.md`;
+    26→    26→    26→4. executar migrações e testes existentes;
+    27→    27→    27→5. mapear os serviços transversais já fornecidos;
+    28→    28→    28→6. implementar o domínio do Company Radar em novos apps, mantendo o padrão `models → services → selectors → views/API → tasks`;
+    29→    29→    29→7. preservar compatibilidade com os testes e módulos existentes.
+    30→    30→    30→
+    31→    31→    31→O Company Core verificado possui Django 6, Python 3.12, PostgreSQL, Redis, Celery, Django REST Framework, HTMX, Alpine.js, Tailwind/DaisyUI, Stripe, armazenamento S3 compatível, multitenancy, RBAC, auditoria, notificações, cotas, feature flags, API keys e serviços de IA. O MVP reutilizará essa base, mas **não incluirá IA nem monitoramento automático de legislação**.
+    32→    32→    32→
+    33→    33→    33→## 2. Resumo executivo
+    34→    34→    34→
+    35→    35→    35→O Company Radar será um sistema operacional para escritórios contábeis. Cada escritório cria uma organização, cadastra sua equipe e sua carteira de empresas-clientes, transforma procedimentos internos em templates reutilizáveis e aplica esses templates aos clientes.
+    36→    36→    36→
+    37→    37→    37→A aplicação de um template gera tarefas, checklists, documentos esperados, responsáveis, datas e recorrências. O sistema acompanha a execução, cobra pendências, envia alertas e mantém um histórico auditável.
+    38→    38→    38→
+    39→    39→    39→O MVP será vendável porque resolve uma operação completa: substitui planilhas, agendas pessoais, cobranças dispersas e processos dependentes da memória de cada colaborador. A retenção virá do acúmulo de templates próprios, documentos, histórico, rotinas recorrentes e participação cotidiana da equipe e dos clientes.
+    40→    40→    40→
+    41→    41→    41→O produto não afirmará que descobre automaticamente obrigações legais. No MVP, as regras são cadastradas pelo próprio escritório. Isso reduz risco jurídico e permite lançar uma solução confiável.
+    42→    42→    42→
+    43→    43→    43→## 3. Posicionamento
+    44→    44→    44→
+    45→    45→    45→### 3.1 Promessa principal
+    46→    46→    46→
+    47→    47→    47→**Padronize a operação do escritório. Nenhum cliente sem processo, nenhum vencimento esquecido e nenhum documento perdido.**
+    48→    48→    48→
+    49→    49→    49→### 3.2 Resultado prometido
+    50→    50→    50→
+    51→    51→    51→Reduzir para menos de cinco minutos o tempo necessário para estruturar operacionalmente um novo cliente, aplicando templates que criam as rotinas necessárias.
+    52→    52→    52→
+    53→    53→    53→### 3.3 O que o MVP é
+    54→    54→    54→
+    55→    55→    55→- gestor de carteira de empresas-clientes;
+    56→    56→    56→- biblioteca privada de templates operacionais;
+    57→    57→    57→- gerador de tarefas, prazos, recorrências e checklists;
+    58→    58→    58→- central de documentos e pendências;
+    59→    59→    59→- calendário compartilhado;
+    60→    60→    60→- portal simplificado do cliente;
+    61→    61→    61→- painel gerencial e trilha de auditoria;
+    62→    62→    62→- SaaS por assinatura com limites por carteira.
+    63→    63→    63→
+    64→    64→    64→### 3.4 O que o MVP não é
+    65→    65→    65→
+    66→    66→    66→- consultoria contábil ou jurídica;
+    67→    67→    67→- monitor automático de leis;
+    68→    68→    68→- motor oficial de obrigações fiscais;
+    69→    69→    69→- substituto de ERP contábil;
+    70→    70→    70→- emissor de guias, declarações ou eventos do eSocial;
+    71→    71→    71→- marketplace público de templates;
+    72→    72→    72→- chatbot ou assistente de IA;
+    73→    73→    73→- aplicativo móvel nativo.
+    74→    74→    74→
+    75→    75→    75→### 3.5 Aviso jurídico obrigatório
+    76→    76→    76→
+    77→    77→    77→No cadastro, rodapé, portal e páginas de templates deve constar que o Company Radar é uma ferramenta de organização operacional. Conteúdos, datas e procedimentos são definidos pelo escritório usuário, que permanece responsável por sua validação técnica, legal e contábil.
+    78→    78→    78→
+    79→    79→    79→## 4. Público, usuários e estrutura organizacional
+    80→    80→    80→
+    81→    81→    81→### 4.1 Comprador
+    82→    82→    82→
+    83→    83→    83→Escritórios contábeis, BPOs financeiros, consultorias empresariais e operações semelhantes que administram múltiplos CNPJs.
+    84→    84→    84→
+    85→    85→    85→### 4.2 Hierarquia multitenant
+    86→    86→    86→
+    87→    87→    87→1. **Plataforma Company Radar:** ambiente global administrado pelo operador do SaaS.
+    88→    88→    88→2. **Organização:** um escritório assinante e seu isolamento de dados.
+    89→    89→    89→3. **Unidade:** filial, sede ou divisão opcional do escritório.
+    90→    90→    90→4. **Departamento:** Fiscal, Pessoal, Contábil, Societário, Legalização, SST ou outro.
+    91→    91→    91→5. **Equipe:** usuários internos vinculados à organização.
+    92→    92→    92→6. **Empresa-cliente:** CNPJ atendido pelo escritório.
+    93→    93→    93→7. **Contato do cliente:** pessoa com acesso opcional ao portal.
+    94→    94→    94→
+    95→    95→    95→Uma pessoa pode participar de mais de uma organização, mas deve selecionar uma organização ativa. Toda consulta, gravação, arquivo, busca, tarefa assíncrona e exportação deve ser filtrada pela organização ativa.
+    96→    96→    96→
+    97→    97→    97→### 4.3 Papéis
+    98→    98→    98→
+    99→    99→    99→| Papel | Finalidade |
+   100→   100→   100→|---|---|
+   101→   101→   101→| Operador da plataforma | Administra planos, organizações, suporte, métricas e configurações globais |
+   102→   102→   102→| Proprietário | Titular da assinatura e controle total do escritório |
+   103→   103→   103→| Administrador | Configura organização, equipe, templates, clientes e integrações |
+   104→   104→   104→| Gestor | Administra carteira, distribui tarefas e consulta relatórios |
+   105→   105→   105→| Colaborador | Executa tarefas e acessa apenas o que sua permissão autorizar |
+   106→   106→   106→| Financeiro | Consulta assinatura, faturas e cobrança |
+   107→   107→   107→| Cliente do escritório | Acessa somente o portal e as empresas explicitamente vinculadas |
+   108→   108→   108→
+   109→   109→   109→Permissões devem ser granulares no padrão `recurso.ação`, incluindo `client.view`, `client.create`, `client.edit`, `client.archive`, `template.publish`, `task.assign`, `document.download`, `billing.manage`, `report.export` e `audit.view`.
+   110→   110→   110→
+   111→   111→   111→## 5. Escopo funcional do MVP
+   112→   112→   112→
+   113→   113→   113→O MVP deverá conter:
+   114→   114→   114→
+   115→   115→   115→1. site público e páginas comerciais;
+   116→   116→   116→2. cadastro, login, recuperação, verificação de e-mail e aceite de termos;
+   117→   117→   117→3. criação e configuração da organização;
+   118→   118→   118→4. convite e gestão de equipe;
+   119→   119→   119→5. cadastro e importação de empresas-clientes;
+   120→   120→   120→6. contatos e acessos ao portal;
+   121→   121→   121→7. departamentos, cargos, equipes, tags e tipos de documentos;
+   122→   122→   122→8. editor, publicação, clonagem e versionamento de templates;
+   123→   123→   123→9. aplicação de templates aos clientes;
+   124→   124→   124→10. tarefas avulsas e geradas, subtarefas/checklists, comentários e anexos;
+   125→   125→   125→11. recorrências e regras de data;
+   126→   126→   126→12. central de documentos;
+   127→   127→   127→13. calendário;
+   128→   128→   128→14. dashboard executivo e operacional;
+   129→   129→   129→15. central de notificações e preferências;
+   130→   130→   130→16. e-mails transacionais e lembretes;
+   131→   131→   131→17. portal do cliente;
+   132→   132→   132→18. planos, checkout, assinatura, faturas, limites e upgrade;
+   133→   133→   133→19. busca global;
+   134→   134→   134→20. relatórios e exportações;
+   135→   135→   135→21. auditoria;
+   136→   136→   136→22. painel administrativo da plataforma;
+   137→   137→   137→23. API interna versionada e webhooks essenciais;
+   138→   138→   138→24. jobs assíncronos e rotinas agendadas.
+   139→   139→   139→
+   140→   140→   140→## 6. Navegação
+   141→   141→   141→
+   142→   142→   142→### 6.1 Área pública
+   143→   143→   143→
+   144→   144→   144→- Início
+   145→   145→   145→- Como funciona
+   146→   146→   146→- Recursos
+   147→   147→   147→- Planos
+   148→   148→   148→- Perguntas frequentes
+   149→   149→   149→- Entrar
+   150→   150→   150→- Começar agora
+   151→   151→   151→- Termos de uso
+   152→   152→   152→- Privacidade
+   153→   153→   153→
+   154→   154→   154→### 6.2 Área autenticada
+   155→   155→   155→
+   156→   156→   156→- Visão geral
+   157→   157→   157→- Empresas-clientes
+   158→   158→   158→- Templates
+   159→   159→   159→- Tarefas
+   160→   160→   160→- Calendário
+   161→   161→   161→- Documentos
+   162→   162→   162→- Relatórios
+   163→   163→   163→- Equipe
+   164→   164→   164→- Notificações
+   165→   165→   165→- Assinatura
+   166→   166→   166→- Configurações
+   167→   167→   167→- Ajuda
+   168→   168→   168→
+   169→   169→   169→### 6.3 Portal do cliente
+   170→   170→   170→
+   171→   171→   171→- Início
+   172→   172→   172→- Pendências
+   173→   173→   173→- Documentos
+   174→   174→   174→- Cronograma
+   175→   175→   175→- Comunicados
+   176→   176→   176→- Perfil e segurança
+   177→   177→   177→
+   178→   178→   178→## 7. Catálogo completo de telas
+   179→   179→   179→
+   180→   180→   180→### 7.1 Site público
+   181→   181→   181→
+   182→   182→   182→#### PUB-01 — Página inicial
+   183→   183→   183→
+   184→   184→   184→Apresenta proposta de valor, problema resolvido, fluxo “template → cliente → tarefas”, recursos, prova social preparada para futura inclusão, planos resumidos, perguntas frequentes e CTAs. Os CTAs levam ao cadastro ou checkout.
+   185→   185→   185→
+   186→   186→   186→#### PUB-02 — Recursos
+   187→   187→   187→
+   188→   188→   188→Explica carteira, templates, tarefas, documentos, calendário, alertas, portal, relatórios, segurança e separação entre organização operacional e aconselhamento legal.
+   189→   189→   189→
+   190→   190→   190→#### PUB-03 — Planos
+   191→   191→   191→
+   192→   192→   192→Alternância mensal/anual, cartões de planos, limites, recursos comuns, comparação, perguntas frequentes, teste gratuito quando habilitado e CTA de contratação. Os preços devem vir do banco, nunca fixos no HTML.
+   193→   193→   193→
+   194→   194→   194→#### PUB-04 — Checkout
+   195→   195→   195→
+   196→   196→   196→Resumo do plano, periodicidade, preço, impostos quando aplicável, cupom, dados do comprador e redirecionamento seguro ao Stripe Checkout. Não armazenar dados completos de cartão.
+   197→   197→   197→
+   198→   198→   198→#### PUB-05 — Confirmação de compra
+   199→   199→   199→
+   200→   200→   200→Exibe sucesso, plano, próximo passo e botão para criar/configurar a organização. Se o webhook ainda estiver processando, mostrar estado “confirmando pagamento” com atualização segura.
+   201→   201→   201→
+   202→   202→   202→### 7.2 Autenticação
+   203→   203→   203→
+   204→   204→   204→#### AUTH-01 — Cadastro
+   205→   205→   205→
+   206→   206→   206→Campos: nome, sobrenome, e-mail profissional, senha, confirmação, aceite dos Termos e Política. Valida e-mail único, força mínima da senha, consentimentos versionados e captcha configurável.
+   207→   207→   207→
+   208→   208→   208→#### AUTH-02 — Login
+   209→   209→   209→
+   210→   210→   210→E-mail, senha, “lembrar”, recuperação e SSO futuro oculto por feature flag.
+   211→   211→   211→
+   212→   212→   212→#### AUTH-03 — Verificação de e-mail
+   213→   213→   213→
+   214→   214→   214→Reenvio com limite, expiração do token e orientação clara.
+   215→   215→   215→
+   216→   216→   216→#### AUTH-04 — Recuperação e redefinição
+   217→   217→   217→
+   218→   218→   218→Fluxo neutro para não revelar contas existentes; token de uso único e expiração.
+   219→   219→   219→
+   220→   220→   220→#### AUTH-05 — Convite
+   221→   221→   221→
+   222→   222→   222→Apresenta escritório, papel, prazo do convite e criação/entrada na conta.
+   223→   223→   223→
+   224→   224→   224→#### AUTH-06 — Seleção de organização
+   225→   225→   225→
+   226→   226→   226→Exibida somente para usuário pertencente a várias organizações.
+   227→   227→   227→
+   228→   228→   228→### 7.3 Onboarding do escritório
+   229→   229→   229→
+   230→   230→   230→#### ONB-01 — Boas-vindas
+   231→   231→   231→
+   232→   232→   232→Explica quatro passos e mostra progresso salvável.
+   233→   233→   233→
+   234→   234→   234→#### ONB-02 — Dados do escritório
+   235→   235→   235→
+   236→   236→   236→Razão social, nome fantasia, CNPJ, CRC opcional, telefone, e-mail, endereço, fuso horário, logotipo e cor principal.
+   237→   237→   237→
+   238→   238→   238→#### ONB-03 — Estrutura
+   239→   239→   239→
+   240→   240→   240→Criação assistida de departamentos e equipes. Sugestões iniciais: Fiscal, Contábil, Pessoal, Societário e Atendimento.
+   241→   241→   241→
+   242→   242→   242→#### ONB-04 — Importar carteira
+   243→   243→   243→
+   244→   244→   244→Upload CSV/XLSX ou pular. Fornece modelo, pré-visualização, mapeamento de colunas, validação, deduplicação e relatório de erros.
+   245→   245→   245→
+   246→   246→   246→#### ONB-05 — Primeiro template
+   247→   247→   247→
+   248→   248→   248→Escolher template inicial fornecido pela plataforma ou criar vazio. Templates iniciais são exemplos operacionais, não regras oficiais.
+   249→   249→   249→
+   250→   250→   250→#### ONB-06 — Conclusão
+   251→   251→   251→
+   252→   252→   252→Checklist de ativação: escritório configurado, cliente cadastrado, template aplicado, equipe convidada e alertas configurados.
+   253→   253→   253→
+   254→   254→   254→### 7.4 Dashboard
+   255→   255→   255→
+   256→   256→   256→#### DASH-01 — Visão geral
+   257→   257→   257→
+   258→   258→   258→Filtros por período, unidade, departamento, responsável, cliente e tag.
+   259→   259→   259→
+   260→   260→   260→Indicadores:
+   261→   261→   261→
+   262→   262→   262→- empresas ativas;
+   263→   263→   263→- tarefas abertas;
+   264→   264→   264→- tarefas vencendo hoje;
+   265→   265→   265→- atrasadas;
+   266→   266→   266→- sem responsável;
+   267→   267→   267→- documentos aguardando cliente;
+   268→   268→   268→- taxa de conclusão no prazo;
+   269→   269→   269→- clientes com maior quantidade de pendências.
+   270→   270→   270→
+   271→   271→   271→Widgets:
+   272→   272→   272→
+   273→   273→   273→- “O que exige atenção hoje”;
+   274→   274→   274→- tarefas críticas;
+   275→   275→   275→- próximos sete dias;
+   276→   276→   276→- atrasos por departamento;
+   277→   277→   277→- pendências de documentos;
+   278→   278→   278→- atividade recente;
+   279→   279→   279→- novos clientes sem template;
+   280→   280→   280→- atalhos rápidos.
+   281→   281→   281→
+   282→   282→   282→Cada cartão é clicável e abre a lista já filtrada. Indicadores respeitam permissões.
+   283→   283→   283→
+   284→   284→   284→#### DASH-02 — Meu trabalho
+   285→   285→   285→
+   286→   286→   286→Mostra apenas tarefas do usuário: hoje, atrasadas, próximas, aguardando terceiro e concluídas recentemente.
+   287→   287→   287→
+   288→   288→   288→### 7.5 Empresas-clientes
+   289→   289→   289→
+   290→   290→   290→#### CLI-01 — Lista
+   291→   291→   291→
+   292→   292→   292→Busca, filtros, colunas configuráveis, ordenação, paginação, seleção em massa, exportação e ações: cadastrar, importar, aplicar template, alterar responsável, adicionar tag e arquivar.
+   293→   293→   293→
+   294→   294→   294→Colunas padrão: nome fantasia, CNPJ, regime, responsável, templates ativos, tarefas atrasadas, próxima data e status.
+   295→   295→   295→
+   296→   296→   296→#### CLI-02 — Novo/editar
+   297→   297→   297→
+   298→   298→   298→Campos:
+   299→   299→   299→
+   300→   300→   300→- razão social e nome fantasia;
+   301→   301→   301→- CNPJ com validação de dígitos;
+   302→   302→   302→- inscrição estadual e municipal;
+   303→   303→   303→- CNAE principal e secundários como informação;
+   304→   304→   304→- regime tributário;
+   305→   305→   305→- porte;
+   306→   306→   306→- segmento;
+   307→   307→   307→- data de abertura;
+   308→   308→   308→- status;
+   309→   309→   309→- unidade do escritório;
+   310→   310→   310→- responsável principal;
+   311→   311→   311→- departamentos responsáveis;
+   312→   312→   312→- contatos;
+   313→   313→   313→- endereço;
+   314→   314→   314→- tags;
+   315→   315→   315→- observações internas;
+   316→   316→   316→- data de início do atendimento.
+   317→   317→   317→
+   318→   318→   318→O MVP não consulta Receita Federal automaticamente. CNPJ pode ser repetido em organizações diferentes, mas não dentro da mesma organização enquanto o registro estiver ativo.
+   319→   319→   319→
+   320→   320→   320→#### CLI-03 — Perfil do cliente
+   321→   321→   321→
+   322→   322→   322→Cabeçalho com identidade, status, responsáveis, saúde operacional e ações. Abas:
+   323→   323→   323→
+   324→   324→   324→1. Resumo;
+   325→   325→   325→2. Tarefas;
+   326→   326→   326→3. Templates aplicados;
+   327→   327→   327→4. Documentos;
+   328→   328→   328→5. Calendário;
+   329→   329→   329→6. Contatos;
+   330→   330→   330→7. Comentários;
+   331→   331→   331→8. Histórico;
+   332→   332→   332→9. Configurações do portal.
+   333→   333→   333→
+   334→   334→   334→#### CLI-04 — Aplicar template
+   335→   335→   335→
+   336→   336→   336→Wizard:
+   337→   337→   337→
+   338→   338→   338→1. selecionar template e versão publicada;
+   339→   339→   339→2. informar data-base e variáveis;
+   340→   340→   340→3. mapear papéis/departamentos para usuários;
+   341→   341→   341→4. revisar datas e recorrências;
+   342→   342→   342→5. revisar itens que serão criados;
+   343→   343→   343→6. confirmar.
+   344→   344→   344→
+   345→   345→   345→Exibe número de etapas, tarefas, checklists, documentos e primeira/última data. Permite desmarcar itens opcionais, nunca editar silenciosamente a versão original.
+   346→   346→   346→
+   347→   347→   347→#### CLI-05 — Arquivar cliente
+   348→   348→   348→
+   349→   349→   349→Exibe impactos: tarefas abertas, portal, documentos e cobrança de cota. Arquivar bloqueia novas recorrências e acesso do cliente, mas preserva histórico. Reativação exige permissão e disponibilidade de cota.
+   350→   350→   350→
+   351→   351→   351→#### CLI-06 — Importação
+   352→   352→   352→
+   353→   353→   353→Upload, mapeamento, prévia, validação, confirmação, processamento assíncrono e relatório final. Nenhuma linha inválida deve impedir as válidas quando a importação parcial for escolhida.
+   354→   354→   354→
+   355→   355→   355→### 7.6 Templates operacionais
+   356→   356→   356→
+   357→   357→   357→#### TMP-01 — Biblioteca
+   358→   358→   358→
+   359→   359→   359→Cards ou tabela com nome, categoria, versão publicada, quantidade de usos, responsável, atualização e status: rascunho, publicado, arquivado.
+   360→   360→   360→
+   361→   361→   361→Filtros por categoria, tag, autor e status. Ações: criar, clonar, visualizar, editar rascunho, publicar, arquivar e exportar.
+   362→   362→   362→
+   363→   363→   363→#### TMP-02 — Criar/editar metadados
+   364→   364→   364→
+   365→   365→   365→Nome, código interno, descrição, finalidade, categoria, cor, ícone, tags, responsável técnico, instruções, aviso, periodicidade padrão e variáveis solicitadas na aplicação.
+   366→   366→   366→
+   367→   367→   367→#### TMP-03 — Editor
+   368→   368→   368→
+   369→   369→   369→Estrutura hierárquica:
+   370→   370→   370→
+   371→   371→   371→`Template → Etapas → Tarefas → Checklist → Documentos esperados`
+   372→   372→   372→
+   373→   373→   373→Editor com reordenação, duplicação e recolhimento de blocos. Cada etapa possui nome, descrição, ordem e condição opcional manual.
+   374→   374→   374→
+   375→   375→   375→Cada tarefa do template possui:
+   376→   376→   376→
+   377→   377→   377→- título e descrição;
+   378→   378→   378→- categoria;
+   379→   379→   379→- prioridade;
+   380→   380→   380→- departamento ou papel responsável;
+   381→   381→   381→- revisor opcional;
+   382→   382→   382→- regra de data;
+   383→   383→   383→- duração estimada;
+   384→   384→   384→- recorrência;
+   385→   385→   385→- status inicial;
+   386→   386→   386→- bloqueios/dependências;
+   387→   387→   387→- checklist;
+   388→   388→   388→- documentos esperados;
+   389→   389→   389→- instruções para equipe;
+   390→   390→   390→- instruções visíveis ao cliente;
+   391→   391→   391→- visibilidade no portal;
+   392→   392→   392→- lembretes;
+   393→   393→   393→- item obrigatório ou opcional.
+   394→   394→   394→
+   395→   395→   395→#### TMP-04 — Regras de data
+   396→   396→   396→
+   397→   397→   397→Opções:
+   398→   398→   398→
+   399→   399→   399→- na data-base;
+   400→   400→   400→- N dias antes/depois da data-base;
+   401→   401→   401→- N dias após aplicação;
+   402→   402→   402→- N dias após conclusão de outra tarefa;
+   403→   403→   403→- dia fixo do mês;
+   404→   404→   404→- primeiro ou último dia útil;
+   405→   405→   405→- dia da semana;
+   406→   406→   406→- data informada por variável;
+   407→   407→   407→- sem prazo.
+   408→   408→   408→
+   409→   409→   409→Calendário de dias úteis do MVP considera fins de semana e feriados cadastrados manualmente por organização. Não haverá fonte oficial automática de feriados.
+   410→   410→   410→
+   411→   411→   411→#### TMP-05 — Recorrência
+   412→   412→   412→
+   413→   413→   413→Diária, semanal, mensal, bimestral, trimestral, semestral, anual ou personalizada. Define início, fim, limite de ocorrências, política para fim de semana e antecedência de geração.
+   414→   414→   414→
+   415→   415→   415→#### TMP-06 — Pré-visualização
+   416→   416→   416→
+   417→   417→   417→Simula aplicação com uma data-base, exibe linha do tempo e alerta para tarefas sem responsável, dependências circulares, datas impossíveis e campos incompletos.
+   418→   418→   418→
+   419→   419→   419→#### TMP-07 — Publicação
+   420→   420→   420→
+   421→   421→   421→Publicar cria versão imutável. Exige nome, ao menos uma etapa e uma tarefa, validações aprovadas e confirmação. Nova alteração cria rascunho da próxima versão.
+   422→   422→   422→
+   423→   423→   423→#### TMP-08 — Comparação de versões
+   424→   424→   424→
+   425→   425→   425→Mostra itens adicionados, removidos e alterados. Clientes permanecem na versão aplicada. Atualização em massa é ação explícita com simulação.
+   426→   426→   426→
+   427→   427→   427→#### TMP-09 — Usos
+   428→   428→   428→
+   429→   429→   429→Lista clientes e instâncias que utilizam cada versão.
+   430→   430→   430→
+   431→   431→   431→### 7.7 Tarefas
+   432→   432→   432→
+   433→   433→   433→#### TASK-01 — Lista
+   434→   434→   434→
+   435→   435→   435→Visualizações: tabela, quadro por status e agrupamento por cliente/responsável. Filtros persistentes e favoritos.
+   436→   436→   436→
+   437→   437→   437→Colunas: título, cliente, etapa, responsável, prioridade, prazo, status, origem, progresso do checklist e indicador de bloqueio.
+   438→   438→   438→
+   439→   439→   439→#### TASK-02 — Detalhe
+   440→   440→   440→
+   441→   441→   441→Cabeçalho, descrição, cliente, template de origem, prazo, recorrência, responsáveis, seguidores e status.
+   442→   442→   442→
+   443→   443→   443→Abas/blocos:
+   444→   444→   444→
+   445→   445→   445→- checklist;
+   446→   446→   446→- documentos;
+   447→   447→   447→- comentários e menções;
+   448→   448→   448→- dependências;
+   449→   449→   449→- ocorrências recorrentes;
+   450→   450→   450→- histórico.
+   451→   451→   451→
+   452→   452→   452→Ações: iniciar, concluir, reabrir, cancelar, alterar prazo, delegar, solicitar documento, comentar e duplicar.
+   453→   453→   453→
+   454→   454→   454→#### TASK-03 — Nova tarefa avulsa
+   455→   455→   455→
+   456→   456→   456→Campos semelhantes ao editor, vinculada ou não a cliente. Uma tarefa avulsa não altera template.
+   457→   457→   457→
+   458→   458→   458→#### TASK-04 — Edição em massa
+   459→   459→   459→
+   460→   460→   460→Responsável, departamento, prioridade, status, prazo e tags. Exige confirmação e registra auditoria item a item ou lote rastreável.
+   461→   461→   461→
+   462→   462→   462→#### TASK-05 — Minha fila
+   463→   463→   463→
+   464→   464→   464→Fila priorizada por atraso, data e prioridade, com conclusão rápida e filtros.
+   465→   465→   465→
+   466→   466→   466→### 7.8 Documentos
+   467→   467→   467→
+   468→   468→   468→#### DOC-01 — Central
+   469→   469→   469→
+   470→   470→   470→Busca e filtros por cliente, tipo, status, tarefa, data, responsável e origem. Colunas: documento, cliente, categoria, validade, situação e última versão.
+   471→   471→   471→
+   472→   472→   472→#### DOC-02 — Upload
+   473→   473→   473→
+   474→   474→   474→Arrastar/selecionar; informar cliente, tipo, tarefa, competência, emissão, validade, observações e visibilidade no portal. Validar extensão, tamanho, malware por integração preparada e cota.
+   475→   475→   475→
+   476→   476→   476→#### DOC-03 — Detalhe
+   477→   477→   477→
+   478→   478→   478→Metadados, versões, vínculo, downloads, validade, comentários e histórico. O download usa URL temporária assinada.
+   479→   479→   479→
+   480→   480→   480→#### DOC-04 — Solicitação
+   481→   481→   481→
+   482→   482→   482→Cria uma pendência para o cliente com título, instruções, prazo, formatos aceitos e lembretes. O envio pelo portal muda o estado para “recebido”; um colaborador aprova ou rejeita.
+   483→   483→   483→
+   484→   484→   484→#### DOC-05 — Tipos de documento
+   485→   485→   485→
+   486→   486→   486→Configuração por organização: nome, categoria, prazo de validade opcional, formatos e tamanho máximo.
+   487→   487→   487→
+   488→   488→   488→### 7.9 Calendário
+   489→   489→   489→
+   490→   490→   490→#### CAL-01 — Calendário geral
+   491→   491→   491→
+   492→   492→   492→Mês, semana, dia e agenda. Exibe tarefas, vencimentos documentais e eventos manuais com cores e filtros.
+   493→   493→   493→
+   494→   494→   494→Arrastar uma tarefa para outra data exige permissão, confirmação e escolha entre “somente esta ocorrência” ou “série futura” quando recorrente.
+   495→   495→   495→
+   496→   496→   496→#### CAL-02 — Evento
+   497→   497→   497→
+   498→   498→   498→Detalhe, vínculo, responsáveis, lembretes e histórico.
+   499→   499→   499→
+   500→   500→   500→#### CAL-03 — Calendários e feriados
+   501→   501→   501→
+   502→   502→   502→Fuso horário, início da semana, feriados manuais e política de ajuste para dias não úteis.
+   503→   503→   503→
+   504→   504→   504→### 7.10 Relatórios
+   505→   505→   505→
+   506→   506→   506→#### REP-01 — Produtividade
+   507→   507→   507→
+   508→   508→   508→Concluídas, no prazo, atrasadas, tempo médio e carga por pessoa/departamento.
+   509→   509→   509→
+   510→   510→   510→#### REP-02 — Carteira
+   511→   511→   511→
+   512→   512→   512→Clientes sem template, com atrasos, com documentos pendentes, inativos e por responsável.
+   513→   513→   513→
+   514→   514→   514→#### REP-03 — Prazos
+   515→   515→   515→
+   516→   516→   516→Vencimentos por período, recorrências futuras e atraso acumulado.
+   517→   517→   517→
+   518→   518→   518→#### REP-04 — Documentos
+   519→   519→   519→
+   520→   520→   520→Solicitados, recebidos, rejeitados, pendentes e com validade próxima.
+   521→   521→   521→
+   522→   522→   522→#### REP-05 — Exportações
+   523→   523→   523→
+   524→   524→   524→CSV/XLSX assíncrono, com filtros atuais, aviso por e-mail e link temporário. PDF fica fora do MVP salvo relatório simples já suportado.
+   525→   525→   525→
+   526→   526→   526→### 7.11 Equipe
+   527→   527→   527→
+   528→   528→   528→#### TEAM-01 — Usuários
+   529→   529→   529→
+   530→   530→   530→Nome, e-mail, papel, departamentos, unidade, status e último acesso. Ações: convidar, editar, suspender, reenviar convite e remover.
+   531→   531→   531→
+   532→   532→   532→#### TEAM-02 — Convite
+   533→   533→   533→
+   534→   534→   534→E-mail, papel, unidade, departamentos e escopo opcional de clientes. Convite expira em sete dias.
+   535→   535→   535→
+   536→   536→   536→#### TEAM-03 — Papéis e permissões
+   537→   537→   537→
+   538→   538→   538→Papéis padrão protegidos e papéis personalizados. Alterações críticas pedem confirmação.
+   539→   539→   539→
+   540→   540→   540→#### TEAM-04 — Departamentos e equipes
+   541→   541→   541→
+   542→   542→   542→CRUD, gestor, membros, cor e status. Exclusão somente quando sem vínculos; caso contrário, arquivar.
+   543→   543→   543→
+   544→   544→   544→### 7.12 Notificações
+   545→   545→   545→
+   546→   546→   546→#### NOT-01 — Central
+   547→   547→   547→
+   548→   548→   548→Lidas/não lidas, tipo, prioridade, link de contexto, marcar tudo e filtros.
+   549→   549→   549→
+   550→   550→   550→#### NOT-02 — Preferências
+   551→   551→   551→
+   552→   552→   552→Por evento e canal: interna e e-mail. Configura resumo diário, silêncio, horário e fuso. Alertas críticos administrativos e de cobrança podem ser obrigatórios.
+   553→   553→   553→
+   554→   554→   554→### 7.13 Assinatura
+   555→   555→   555→
+   556→   556→   556→#### BILL-01 — Plano atual
+   557→   557→   557→
+   558→   558→   558→Plano, ciclo, valor, próxima cobrança, estado da assinatura e consumo de empresas, usuários e armazenamento.
+   559→   559→   559→
+   560→   560→   560→#### BILL-02 — Alterar plano
+   561→   561→   561→
+   562→   562→   562→Comparação, cálculo proporcional fornecido pelo Stripe, confirmação e efeito dos novos limites.
+   563→   563→   563→
+   564→   564→   564→#### BILL-03 — Faturas
+   565→   565→   565→
+   566→   566→   566→Data, valor, estado, recibo e download.
+   567→   567→   567→
+   568→   568→   568→#### BILL-04 — Método de pagamento
+   569→   569→   569→
+   570→   570→   570→Redireciona ao portal seguro do Stripe.
+   571→   571→   571→
+   572→   572→   572→#### BILL-05 — Cancelamento
+   573→   573→   573→
+   574→   574→   574→Motivo, consequências, data efetiva e opção de reter até fim do ciclo. Cancelamento não apaga dados imediatamente.
+   575→   575→   575→
+   576→   576→   576→### 7.14 Configurações
+   577→   577→   577→
+   578→   578→   578→#### SET-01 — Organização
+   579→   579→   579→
+   580→   580→   580→Identidade, endereço, fuso, logo, preferências e responsável.
+   581→   581→   581→
+   582→   582→   582→#### SET-02 — Campos e classificações
+   583→   583→   583→
+   584→   584→   584→Tags, categorias, tipos documentais, prioridades e segmentos.
+   585→   585→   585→
+   586→   586→   586→#### SET-03 — Alertas
+   587→   587→   587→
+   588→   588→   588→Antecedências padrão: 30, 15, 7, 3, 1 e 0 dias; escalonamento de atrasos e destinatários.
+   589→   589→   589→
+   590→   590→   590→#### SET-04 — Segurança
+   591→   591→   591→
+   592→   592→   592→Sessões, política de senha, 2FA se suportado pelo Core, histórico de acesso e revogação.
+   593→   593→   593→
+   594→   594→   594→#### SET-05 — Auditoria
+   595→   595→   595→
+   596→   596→   596→Busca por ator, ação, entidade, data e IP; exportação restrita.
+   597→   597→   597→
+   598→   598→   598→#### SET-06 — Dados e privacidade
+   599→   599→   599→
+   600→   600→   600→Exportar dados, política de retenção, solicitações LGPD e encerramento da organização.
+   601→   601→   601→
+   602→   602→   602→### 7.15 Portal do cliente
+   603→   603→   603→
+   604→   604→   604→#### PORT-01 — Entrada e seleção de empresa
+   605→   605→   605→
+   606→   606→   606→Login e empresas às quais o contato foi vinculado.
+   607→   607→   607→
+   608→   608→   608→#### PORT-02 — Início
+   609→   609→   609→
+   610→   610→   610→Pendências urgentes, documentos solicitados, próximos prazos e comunicados.
+   611→   611→   611→
+   612→   612→   612→#### PORT-03 — Pendências
+   613→   613→   613→
+   614→   614→   614→Somente tarefas marcadas como visíveis. Cliente pode enviar documento, comentar e marcar sua ação como realizada; conclusão final permanece com o escritório quando configurado.
+   615→   615→   615→
+   616→   616→   616→#### PORT-04 — Documentos
+   617→   617→   617→
+   618→   618→   618→Enviar, consultar documentos liberados e acompanhar aprovação/rejeição.
+   619→   619→   619→
+   620→   620→   620→#### PORT-05 — Cronograma
+   621→   621→   621→
+   622→   622→   622→Eventos visíveis, sem informações internas.
+   623→   623→   623→
+   624→   624→   624→#### PORT-06 — Perfil
+   625→   625→   625→
+   626→   626→   626→Contato, senha, notificações e aceite.
+   627→   627→   627→
+   628→   628→   628→### 7.16 Administração global
+   629→   629→   629→
+   630→   630→   630→#### ADM-01 — Visão da plataforma
+   631→   631→   631→
+   632→   632→   632→MRR, organizações ativas, trials, cancelamentos, inadimplência, uso e jobs com erro.
+   633→   633→   633→
+   634→   634→   634→#### ADM-02 — Organizações
+   635→   635→   635→
+   636→   636→   636→Plano, status, consumo, proprietário e suporte. Acesso assistido deve ser temporário, consentido, auditado e visualmente identificado.
+   637→   637→   637→
+   638→   638→   638→#### ADM-03 — Planos
+   639→   639→   639→
+   640→   640→   640→Nome, preço mensal/anual, Stripe Price IDs, limites, recursos, ordem, destaque e disponibilidade.
+   641→   641→   641→
+   642→   642→   642→#### ADM-04 — Cupons e trials
+   643→   643→   643→
+   644→   644→   644→Preferencialmente geridos no Stripe e refletidos no sistema.
+   645→   645→   645→
+   646→   646→   646→#### ADM-05 — Templates iniciais
+   647→   647→   647→
+   648→   648→   648→Modelos que uma organização pode copiar. Nunca são aplicados automaticamente.
+   649→   649→   649→
+   650→   650→   650→#### ADM-06 — Saúde operacional
+   651→   651→   651→
+   652→   652→   652→Filas, webhooks, e-mails, armazenamento, integrações e reprocessamento seguro.
+   653→   653→   653→
+   654→   654→   654→## 8. Processos ponta a ponta
+   655→   655→   655→
+   656→   656→   656→### 8.1 Contratação
+   657→   657→   657→
+   658→   658→   658→1. visitante escolhe plano;
+   659→   659→   659→2. cria conta ou autentica;
+   660→   660→   660→3. checkout é criado pelo BillingSDK;
+   661→   661→   661→4. Stripe processa o pagamento;
+   662→   662→   662→5. webhook idempotente ativa assinatura;
+   663→   663→   663→6. organização é criada ou liberada;
+   664→   664→   664→7. proprietário inicia onboarding;
+   665→   665→   665→8. e-mail de confirmação é enviado.
+   666→   666→   666→
+   667→   667→   667→Não liberar plano pago apenas pelo retorno do navegador; a fonte de verdade é o webhook validado.
+   668→   668→   668→
+   669→   669→   669→### 8.2 Entrada de novo cliente
+   670→   670→   670→
+   671→   671→   671→1. colaborador cadastra ou importa empresa;
+   672→   672→   672→2. escolhe responsável e tags;
+   673→   673→   673→3. seleciona template publicado;
+   674→   674→   674→4. informa data-base e variáveis;
+   675→   675→   675→5. sistema simula;
+   676→   676→   676→6. usuário revisa;
+   677→   677→   677→7. transação cria instância, etapas, tarefas, checklists, documentos esperados e recorrências;
+   678→   678→   678→8. notificações são agendadas;
+   679→   679→   679→9. histórico registra autor, versão e parâmetros.
+   680→   680→   680→
+   681→   681→   681→Se falhar, a operação inteira deve ser revertida. Aplicação repetida do mesmo template exige confirmação.
+   682→   682→   682→
+   683→   683→   683→### 8.3 Execução
+   684→   684→   684→
+   685→   685→   685→1. tarefa fica “a fazer”;
+   686→   686→   686→2. responsável inicia;
+   687→   687→   687→3. checklist e documentos são processados;
+   688→   688→   688→4. tarefa pode ficar “aguardando cliente”, “aguardando terceiro” ou “bloqueada”;
+   689→   689→   689→5. ao cumprir critérios, conclui;
+   690→   690→   690→6. dependências são liberadas;
+   691→   691→   691→7. recorrência gera/agrega próxima ocorrência;
+   692→   692→   692→8. indicadores são atualizados.
+   693→   693→   693→
+   694→   694→   694→### 8.4 Solicitação documental
+   695→   695→   695→
+   696→   696→   696→1. colaborador cria solicitação;
+   697→   697→   697→2. sistema notifica contato;
+   698→   698→   698→3. cliente envia arquivo;
+   699→   699→   699→4. arquivo passa por validação;
+   700→   700→   700→5. colaborador aprova ou rejeita com motivo;
+   701→   701→   701→6. aprovação pode concluir item do checklist;
+   702→   702→   702→7. rejeição reabre a pendência e notifica o cliente.
+   703→   703→   703→
+   704→   704→   704→### 8.5 Atualização de template
+   705→   705→   705→
+   706→   706→   706→1. usuário cria rascunho a partir da versão publicada;
+   707→   707→   707→2. edita e valida;
+   708→   708→   708→3. publica nova versão;
+   709→   709→   709→4. novos clientes usam a nova versão;
+   710→   710→   710→5. clientes existentes permanecem na anterior;
+   711→   711→   711→6. gestor pode simular migração;
+   712→   712→   712→7. atualização nunca remove silenciosamente tarefas executadas ou documentos.
+   713→   713→   713→
+   714→   714→   714→### 8.6 Inadimplência
+   715→   715→   715→
+   716→   716→   716→1. falha de pagamento gera aviso;
+   717→   717→   717→2. assinatura entra em `past_due`;
+   718→   718→   718→3. existe período de tolerância configurável;
+   719→   719→   719→4. após tolerância, organização fica somente leitura;
+   720→   720→   720→5. proprietário ainda acessa cobrança e exportação permitida;
+   721→   721→   721→6. regularização restaura acesso;
+   722→   722→   722→7. exclusão segue política de retenção, nunca é imediata.
+   723→   723→   723→
+   724→   724→   724→### 8.7 Encerramento
+   725→   725→   725→
+   726→   726→   726→Cancelamento mantém acesso até a data efetiva. Após isso, somente leitura por período configurado. Proprietário pode exportar dados. Exclusão definitiva exige confirmação reforçada e retenções legais.
+   727→   727→   727→
+   728→   728→   728→## 9. Estados e regras de negócio
+   729→   729→   729→
+   730→   730→   730→### 9.1 Cliente
+   731→   731→   731→
+   732→   732→   732→`rascunho → ativo → suspenso → arquivado`
+   733→   733→   733→
+   734→   734→   734→Arquivado não conta para cota apenas após confirmação de que não possui rotinas ativas. Exclusão física não é oferecida na interface comum.
+   735→   735→   735→
+   736→   736→   736→### 9.2 Template
+   737→   737→   737→
+   738→   738→   738→`rascunho → publicado → arquivado`
+   739→   739→   739→
+   740→   740→   740→Versão publicada é imutável. Arquivamento impede novas aplicações, sem afetar instâncias.
+   741→   741→   741→
+   742→   742→   742→### 9.3 Tarefa
+   743→   743→   743→
+   744→   744→   744→`a_fazer → em_andamento → aguardando_cliente/aguardando_terceiro/bloqueada → concluída`
+   745→   745→   745→
+   746→   746→   746→Estados terminais adicionais: `cancelada`. Reabertura de concluída exige motivo.
+   747→   747→   747→
+   748→   748→   748→Regras:
+   749→   749→   749→
+   750→   750→   750→- tarefa bloqueada não pode ser concluída sem permissão excepcional;
+   751→   751→   751→- tarefa com checklist obrigatório incompleto não conclui;
+   752→   752→   752→- tarefa que exige documento aprovado não conclui antes da aprovação;
+   753→   753→   753→- alteração de prazo vencido registra motivo;
+   754→   754→   754→- conclusão registra data, autor e evidências;
+   755→   755→   755→- atrasada é cálculo derivado, não status persistido independente.
+   756→   756→   756→
+   757→   757→   757→### 9.4 Documento
+   758→   758→   758→
+   759→   759→   759→`solicitado → recebido → em_análise → aprovado/rejeitado → arquivado`
+   760→   760→   760→
+   761→   761→   761→Uma nova versão preserva as anteriores. Exclusão lógica e auditoria são obrigatórias.
+   762→   762→   762→
+   763→   763→   763→### 9.5 Assinatura
+   764→   764→   764→
+   765→   765→   765→`trialing → active → past_due → read_only → canceled`
+   766→   766→   766→
+   767→   767→   767→Estados devem mapear eventos reais do Stripe e permitir reconciliação.
+   768→   768→   768→
+   769→   769→   769→### 9.6 Datas
+   770→   770→   770→
+   771→   771→   771→- armazenar timestamps em UTC;
+   772→   772→   772→- exibir conforme fuso da organização;
+   773→   773→   773→- datas puras não devem mudar por conversão de fuso;
+   774→   774→   774→- política de dia não útil: anterior, posterior ou manter;
+   775→   775→   775→- dependências circulares são proibidas;
+   776→   776→   776→- alteração na série recorrente não modifica ocorrências concluídas;
+   777→   777→   777→- cada job de geração deve ser idempotente.
+   778→   778→   778→
+   779→   779→   779→## 10. Planos e monetização
+   780→   780→   780→
+   781→   781→   781→### 10.1 Planos iniciais sugeridos
+   782→   782→   782→
+   783→   783→   783→| Plano | Empresas ativas | Usuários internos | Armazenamento | Preço mensal sugerido |
+   784→   784→   784→|---|---:|---:|---:|---:|
+   785→   785→   785→| Essencial | 30 | 5 | 10 GB | R$ 99 |
+   786→   786→   786→| Profissional | 100 | 15 | 50 GB | R$ 199 |
+   787→   787→   787→| Gestão | 250 | 40 | 150 GB | R$ 399 |
+   788→   788→   788→| Escala | 500 | 100 | 500 GB | R$ 699 |
+   789→   789→   789→| Enterprise | negociado | negociado | negociado | a partir de R$ 999 |
+   790→   790→   790→
+   791→   791→   791→Os preços são configuração comercial, não regra fixa. Plano anual pode oferecer dois meses equivalentes de desconto.
+   792→   792→   792→
+   793→   793→   793→### 10.2 Recursos
+   794→   794→   794→
+   795→   795→   795→Todos os planos recebem núcleo funcional. Diferenciação principal por carteira, usuários, armazenamento, exportações avançadas, personalização do portal e suporte. Não retirar recursos essenciais de segurança ou auditoria dos planos menores.
+   796→   796→   796→
+   797→   797→   797→### 10.3 Cotas
+   798→   798→   798→
+   799→   799→   799→Chaves sugeridas:
+   800→   800→   800→
+   801→   801→   801→- `active_clients`;
+   802→   802→   802→- `internal_users`;
+   803→   803→   803→- `storage_bytes`;
+   804→   804→   804→- `monthly_exports`;
+   805→   805→   805→- `portal_contacts`;
+   806→   806→   806→- `active_templates`.
+   807→   807→   807→
+   808→   808→   808→Ao atingir 80%, avisar. Em 100%, bloquear nova criação que aumente consumo, sem bloquear leitura ou conclusão de trabalho existente. Upgrade tem efeito imediato após confirmação de cobrança.
+   809→   809→   809→
+   810→   810→   810→### 10.4 Trial
+   811→   811→   811→
+   812→   812→   812→Opcional de 14 dias, limitado a dez clientes, três usuários e 1 GB. Não exigir cartão é decisão comercial configurável. Enviar avisos no 7º, 12º e 14º dia.
+   813→   813→   813→
+   814→   814→   814→## 11. E-mails e notificações
+   815→   815→   815→
+   816→   816→   816→Cada envio deve possuir template versionado, assunto, pré-cabeçalho, corpo HTML/texto, variáveis, botão, rodapé, preferência e registro de entrega.
+   817→   817→   817→
+   818→   818→   818→| Código | Gatilho | Destinatário | Assunto sugerido |
+   819→   819→   819→|---|---|---|---|
+   820→   820→   820→| `account_verify` | cadastro | usuário | Confirme seu e-mail no Company Radar |
+   821→   821→   821→| `organization_welcome` | organização criada | proprietário | Seu escritório está pronto para ser configurado |
+   822→   822→   822→| `team_invitation` | convite | convidado | Você foi convidado para o escritório {{organization}} |
+   823→   823→   823→| `client_portal_invitation` | acesso concedido | contato | Acesse suas pendências e documentos |
+   824→   824→   824→| `task_assigned` | atribuição | responsável | Nova tarefa: {{task_title}} |
+   825→   825→   825→| `task_due_soon` | antecedência | responsável/gestor | Prazo próximo: {{task_title}} |
+   826→   826→   826→| `task_overdue` | atraso | responsável | Tarefa atrasada desde {{due_date}} |
+   827→   827→   827→| `manager_overdue_digest` | resumo | gestor | {{count}} pendências exigem atenção |
+   828→   828→   828→| `document_requested` | solicitação | cliente | Documento solicitado por {{organization}} |
+   829→   829→   829→| `document_received` | upload | responsável | Documento recebido de {{client}} |
+   830→   830→   830→| `document_rejected` | rejeição | cliente | Precisamos de uma nova versão do documento |
+   831→   831→   831→| `document_expiring` | validade | responsável | Documento vence em {{days}} dias |
+   832→   832→   832→| `daily_digest` | diário | usuário | Seu resumo do Company Radar |
+   833→   833→   833→| `weekly_manager_digest` | semanal | gestor | Resumo semanal da carteira |
+   834→   834→   834→| `payment_succeeded` | cobrança | proprietário/financeiro | Pagamento confirmado |
+   835→   835→   835→| `payment_failed` | falha | proprietário/financeiro | Não foi possível processar o pagamento |
+   836→   836→   836→| `trial_ending` | fim próximo | proprietário | Seu período de teste termina em {{days}} dias |
+   837→   837→   837→| `subscription_canceled` | cancelamento | proprietário | Cancelamento programado |
+   838→   838→   838→| `export_ready` | exportação | solicitante | Sua exportação está pronta |
+   839→   839→   839→| `security_alert` | evento sensível | usuário | Novo acesso ou alteração de segurança |
+   840→   840→   840→
+   841→   841→   841→### 11.1 Regras antirruído
+   842→   842→   842→
+   843→   843→   843→- não enviar repetidamente o mesmo alerta no mesmo dia;
+   844→   844→   844→- agrupar lembretes em resumo quando configurado;
+   845→   845→   845→- atraso crítico pode escalar ao gestor após N dias;
+   846→   846→   846→- respeitar fuso e janela silenciosa;
+   847→   847→   847→- permitir cancelamento de comunicações não essenciais;
+   848→   848→   848→- links autenticados não devem expor dados sensíveis;
+   849→   849→   849→- registrar tentativa, sucesso, falha e reprocessamento.
+   850→   850→   850→
+   851→   851→   851→## 12. Modelo de dados
+   852→   852→   852→
+   853→   853→   853→Todos os modelos de domínio devem herdar `TenantMixin`, `TimestampMixin` e, quando aplicável, `SoftDeleteMixin`.
+   854→   854→   854→
+   855→   855→   855→### 12.1 Entidades
+   856→   856→   856→
+   857→   857→   857→- `BusinessUnit`: unidade do escritório.
+   858→   858→   858→- `Department`: departamento.
+   859→   859→   859→- `Team`: equipe e membros.
+   860→   860→   860→- `ClientCompany`: empresa-cliente.
+   861→   861→   861→- `ClientContact`: contato.
+   862→   862→   862→- `ClientPortalAccess`: vínculo de acesso.
+   863→   863→   863→- `Tag` e `TaggedItem`.
+   864→   864→   864→- `Template`: identidade lógica.
+   865→   865→   865→- `TemplateVersion`: versão imutável/publicável.
+   866→   866→   866→- `TemplateVariable`: parâmetros.
+   867→   867→   867→- `TemplateStage`.
+   868→   868→   868→- `TemplateTask`.
+   869→   869→   869→- `TemplateChecklistItem`.
+   870→   870→   870→- `TemplateDocumentRequirement`.
+   871→   871→   871→- `TemplateDependency`.
+   872→   872→   872→- `TemplateApplication`: aplicação a um cliente.
+   873→   873→   873→- `ProcessStageInstance`.
+   874→   874→   874→- `Task`: ocorrência executável.
+   875→   875→   875→- `TaskAssignment`.
+   876→   876→   876→- `TaskDependency`.
+   877→   877→   877→- `ChecklistItem`.
+   878→   878→   878→- `TaskComment`.
+   879→   879→   879→- `TaskFollower`.
+   880→   880→   880→- `RecurrenceRule`.
+   881→   881→   881→- `DocumentRequest`.
+   882→   882→   882→- `Document`: metadados de negócio.
+   883→   883→   883→- `DocumentVersion`: referência ao StoredObject do Core.
+   884→   884→   884→- `DocumentType`.
+   885→   885→   885→- `CalendarEvent`.
+   886→   886→   886→- `Holiday`.
+   887→   887→   887→- `NotificationPreference`.
+   888→   888→   888→- `SavedFilter`.
+   889→   889→   889→- `ExportJob`.
+   890→   890→   890→
+   891→   891→   891→### 12.2 Restrições
+   892→   892→   892→
+   893→   893→   893→- unicidade de CNPJ por organização e registros ativos;
+   894→   894→   894→- código do template único por organização;
+   895→   895→   895→- número da versão único por template;
+   896→   896→   896→- nomes de departamentos únicos por organização;
+   897→   897→   897→- integridade entre organização de cliente, tarefa, documento e template;
+   898→   898→   898→- nenhum FK cruzando organizações;
+   899→   899→   899→- índices em organização + status, organização + prazo, organização + cliente e campos de busca;
+   900→   900→   900→- exclusão lógica para dados operacionais;
+   901→   901→   901→- UUID público para URLs e IDs internos não sequenciais expostos.
+   902→   902→   902→
+   903→   903→   903→## 13. Arquitetura
+   904→   904→   904→
+   905→   905→   905→### 13.1 Reutilização do Company Core
+   906→   906→   906→
+   907→   907→   907→| Necessidade | Componente |
+   908→   908→   908→|---|---|
+   909→   909→   909→| organizações e membros | `apps.organizations` |
+   910→   910→   910→| usuários e autenticação | `apps.users` + allauth |
+   911→   911→   911→| RBAC | `apps.permissions` |
+   912→   912→   912→| planos e Stripe | `apps.billing` |
+   913→   913→   913→| limites | `apps.quotas` |
+   914→   914→   914→| arquivos | `apps.storage` |
+   915→   915→   915→| e-mails e eventos | `apps.notifications` |
+   916→   916→   916→| auditoria | `apps.audit` |
+   917→   917→   917→| jobs | `apps.jobs` + Celery |
+   918→   918→   918→| uso e métricas | `apps.usage`/`analytics` |
+   919→   919→   919→| API keys | `apps.api` |
+   920→   920→   920→| busca | `apps.search` |
+   921→   921→   921→| flags | `apps.feature_flags` |
+   922→   922→   922→| configurações | `apps.settings` |
+   923→   923→   923→
+   924→   924→   924→### 13.2 Apps novos sugeridos
+   925→   925→   925→
+   926→   926→   926→- `apps/clients`;
+   927→   927→   927→- `apps/radar_templates`;
+   928→   928→   928→- `apps/radar_tasks`;
+   929→   929→   929→- `apps/radar_documents`;
+   930→   930→   930→- `apps/radar_calendar`;
+   931→   931→   931→- `apps/radar_portal`;
+   932→   932→   932→- `apps/radar_reports`.
+   933→   933→   933→
+   934→   934→   934→Não criar um único app gigante. Serviços de domínio devem ter transações claras e selectors devem impedir consultas sem tenant.
+   935→   935→   935→
+   936→   936→   936→### 13.3 Camadas
+   937→   937→   937→
+   938→   938→   938→- models: estrutura e invariantes locais;
+   939→   939→   939→- services: comandos e transações;
+   940→   940→   940→- selectors: leitura otimizada;
+   941→   941→   941→- views: orquestração HTTP/HTMX;
+   942→   942→   942→- serializers: contrato REST;
+   943→   943→   943→- tasks: trabalho assíncrono idempotente;
+   944→   944→   944→- policies/permissions: autorização;
+   945→   945→   945→- templates: interface acessível.
+   946→   946→   946→
+   947→   947→   947→### 13.4 Eventos de domínio
+   948→   948→   948→
+   949→   949→   949→Exemplos: `client.created`, `template.published`, `template.applied`, `task.assigned`, `task.completed`, `task.overdue`, `document.requested`, `document.received`. Eventos alimentam notificações, auditoria, analytics e webhooks sem acoplar módulos.
+   950→   950→   950→
+   951→   951→   951→## 14. API e conexões
+   952→   952→   952→
+   953→   953→   953→### 14.1 API REST
+   954→   954→   954→
+   955→   955→   955→Prefixo `/api/v1/radar/`.
+   956→   956→   956→
+   957→   957→   957→Recursos:
+   958→   958→   958→
+   959→   959→   959→- `/clients`;
+   960→   960→   960→- `/client-contacts`;
+   961→   961→   961→- `/templates`;
+   962→   962→   962→- `/template-versions`;
+   963→   963→   963→- `/template-applications`;
+   964→   964→   964→- `/tasks`;
+   965→   965→   965→- `/checklist-items`;
+   966→   966→   966→- `/document-requests`;
+   967→   967→   967→- `/documents`;
+   968→   968→   968→- `/calendar-events`;
+   969→   969→   969→- `/departments`;
+   970→   970→   970→- `/reports`;
+   971→   971→   971→- `/exports`.
+   972→   972→   972→
+   973→   973→   973→Usar paginação, filtros, ordenação, throttling, OpenAPI e envelope padrão do Core. Operações como aplicação de template devem ser endpoints de ação, não CRUD artificial.
+   974→   974→   974→
+   975→   975→   975→### 14.2 Stripe
+   976→   976→   976→
+   977→   977→   977→Checkout, portal do cliente Stripe, assinatura, faturas e webhooks assinados. Idempotência, reconciliação diária e tratamento de eventos fora de ordem são obrigatórios.
+   978→   978→   978→
+   979→   979→   979→### 14.3 E-mail
+   980→   980→   980→
+   981→   981→   981→Backend configurável pelo Company Core. MVP precisa de e-mail transacional; WhatsApp, Slack e SMS ficam fora do escopo.
+   982→   982→   982→
+   983→   983→   983→### 14.4 Armazenamento
+   984→   984→   984→
+   985→   985→   985→Produção em S3/R2 compatível. Arquivos privados, criptografia do provedor, URLs temporárias, limites e metadados. Nunca servir diretamente de pasta pública.
+   986→   986→   986→
+   987→   987→   987→### 14.5 Importação/exportação
+   988→   988→   988→
+   989→   989→   989→CSV/XLSX com processamento assíncrono. Arquivo de importação original e relatório de resultado com retenção limitada.
+   990→   990→   990→
+   991→   991→   991→### 14.6 Webhooks de saída
+   992→   992→   992→
+   993→   993→   993→Preparar eventos para clientes Enterprise, inicialmente desabilitados por flag.
+   994→   994→   994→
+   995→   995→   995→## 15. Jobs agendados
+   996→   996→   996→
+   997→   997→   997→- gerar ocorrências recorrentes;
+   998→   998→   998→- identificar tarefas próximas e atrasadas;
+   999→   999→   999→- identificar documentos a vencer;
+  1000→  1000→  1000→- enviar resumos;
+  1001→  1001→  1001→- expirar convites;
+  1002→  1002→  1002→- processar importações/exportações;
+  1003→  1003→  1003→- reconciliar assinatura;
+  1004→  1004→  1004→- limpar arquivos temporários;
+  1005→  1005→  1005→- recalcular agregações;
+  1006→  1006→  1006→- reprocessar notificações elegíveis.
+  1007→  1007→  1007→
+  1008→  1008→  1008→Cada job deve possuir trava, idempotency key, tentativas com backoff, dead-letter operacional ou estado de falha e observabilidade.
+  1009→  1009→  1009→
+  1010→  1010→  1010→## 16. Segurança, LGPD e auditoria
+  1011→  1011→  1011→
+  1012→  1012→  1012→- isolamento multitenant testado;
+  1013→  1013→  1013→- princípio do menor privilégio;
+  1014→  1014→  1014→- CSRF, XSS, SQL injection e upload seguro;
+  1015→  1015→  1015→- senhas por allauth e cookies seguros;
+  1016→  1016→  1016→- 2FA quando disponível;
+  1017→  1017→  1017→- criptografia em trânsito;
+  1018→  1018→  1018→- segredos somente em ambiente;
+  1019→  1019→  1019→- logs sem conteúdo sensível;
+  1020→  1020→  1020→- backups criptografados e restauração testada;
+  1021→  1021→  1021→- retenção configurada;
+  1022→  1022→  1022→- exportação e exclusão de titular;
+  1023→  1023→  1023→- contratos e consentimentos versionados;
+  1024→  1024→  1024→- subprocessadores documentados;
+  1025→  1025→  1025→- trilha de criação, edição, conclusão, download, upload, exclusão, permissão e cobrança.
+  1026→  1026→  1026→
+  1027→  1027→  1027→Eventos de auditoria devem registrar organização, ator, ação, alvo, timestamp, IP, user-agent, request ID e diferenças seguras.
+  1028→  1028→  1028→
+  1029→  1029→  1029→## 17. Requisitos não funcionais
+  1030→  1030→  1030→
+  1031→  1031→  1031→### 17.1 Desempenho
+  1032→  1032→  1032→
+  1033→  1033→  1033→- páginas comuns: p95 abaixo de 2 segundos em carga nominal;
+  1034→  1034→  1034→- APIs de lista: p95 abaixo de 800 ms sem exportação;
+  1035→  1035→  1035→- dashboard com agregações/cache, sem N+1;
+  1036→  1036→  1036→- aplicação de template com até 500 tarefas em job ou transação controlada;
+  1037→  1037→  1037→- paginação obrigatória.
+  1038→  1038→  1038→
+  1039→  1039→  1039→### 17.2 Disponibilidade
+  1040→  1040→  1040→
+  1041→  1041→  1041→Meta inicial de 99,5% mensal, health/readiness endpoints, deploy sem perda de migração e manutenção comunicada.
+  1042→  1042→  1042→
+  1043→  1043→  1043→### 17.3 Compatibilidade e acessibilidade
+  1044→  1044→  1044→
+  1045→  1045→  1045→Desktop responsivo e celular funcional; navegadores atuais; WCAG 2.1 AA como meta; navegação por teclado, foco, contraste e rótulos.
+  1046→  1046→  1046→
+  1047→  1047→  1047→### 17.4 Observabilidade
+  1048→  1048→  1048→
+  1049→  1049→  1049→Logs estruturados, request ID, métricas, erros centralizados, monitoramento de filas, webhooks, e-mails, storage, banco e uso de cotas.
+  1050→  1050→  1050→
+  1051→  1051→  1051→### 17.5 Backup
+  1052→  1052→  1052→
+  1053→  1053→  1053→Backup diário, retenção mínima de 30 dias, RPO alvo de 24 horas e RTO alvo de 8 horas no MVP. Teste periódico de restauração.
+  1054→  1054→  1054→
+  1055→  1055→  1055→## 18. Experiência e padrões de interface
+  1056→  1056→  1056→
+  1057→  1057→  1057→- interface em português do Brasil;
+  1058→  1058→  1058→- datas `dd/mm/aaaa`;
+  1059→  1059→  1059→- moeda BRL;
+  1060→  1060→  1060→- estados vazios com próximo passo;
+  1061→  1061→  1061→- ações destrutivas confirmadas;
+  1062→  1062→  1062→- autosave no editor com indicador;
+  1063→  1063→  1063→- feedback de carregamento e erro;
+  1064→  1064→  1064→- tabelas com filtros preservados;
+  1065→  1065→  1065→- atalhos “Novo cliente”, “Aplicar template”, “Nova tarefa” e “Solicitar documento”;
+  1066→  1066→  1066→- cores nunca como único indicador;
+  1067→  1067→  1067→- ajuda contextual explicando que templates são definidos pelo escritório.
+  1068→  1068→  1068→
+  1069→  1069→  1069→## 19. Métricas de produto
+  1070→  1070→  1070→
+  1071→  1071→  1071→### 19.1 Ativação
+  1072→  1072→  1072→
+  1073→  1073→  1073→Organização ativa quando, em até sete dias:
+  1074→  1074→  1074→
+  1075→  1075→  1075→- cadastrou ou importou ao menos cinco clientes;
+  1076→  1076→  1076→- criou/convidou dois usuários;
+  1077→  1077→  1077→- publicou ou copiou um template;
+  1078→  1078→  1078→- aplicou template;
+  1079→  1079→  1079→- concluiu ao menos uma tarefa.
+  1080→  1080→  1080→
+  1081→  1081→  1081→### 19.2 Retenção
+  1082→  1082→  1082→
+  1083→  1083→  1083→- organizações ativas semanalmente;
+  1084→  1084→  1084→- tarefas concluídas;
+  1085→  1085→  1085→- templates aplicados;
+  1086→  1086→  1086→- clientes com rotinas;
+  1087→  1087→  1087→- documentos recebidos pelo portal;
+  1088→  1088→  1088→- usuários ativos por organização;
+  1089→  1089→  1089→- churn e motivo.
+  1090→  1090→  1090→
+  1091→  1091→  1091→### 19.3 Valor
+  1092→  1092→  1092→
+  1093→  1093→  1093→- tempo até primeira aplicação;
+  1094→  1094→  1094→- tempo para estruturar cliente;
+  1095→  1095→  1095→- percentual de tarefas no prazo;
+  1096→  1096→  1096→- redução de pendências;
+  1097→  1097→  1097→- adesão ao portal.
+  1098→  1098→  1098→
+  1099→  1099→  1099→## 20. Critérios de aceite por épico
+  1100→  1100→  1100→
+  1101→  1101→  1101→### Fundação
+  1102→  1102→  1102→
+  1103→  1103→  1103→- clone obrigatório executado;
+  1104→  1104→  1104→- testes originais permanecem verdes;
+  1105→  1105→  1105→- novo domínio segue arquitetura do Core;
+  1106→  1106→  1106→- isolamento de tenant coberto por testes.
+  1107→  1107→  1107→
+  1108→  1108→  1108→### Clientes
+  1109→  1109→  1109→
+  1110→  1110→  1110→- CRUD, importação, arquivamento e perfil funcionam;
+  1111→  1111→  1111→- CNPJ e cotas validados;
+  1112→  1112→  1112→- nenhuma organização acessa cliente de outra.
+  1113→  1113→  1113→
+  1114→  1114→  1114→### Templates
+  1115→  1115→  1115→
+  1116→  1116→  1116→- editor cria estrutura completa;
+  1117→  1117→  1117→- publicação gera versão imutável;
+  1118→  1118→  1118→- simulação calcula datas;
+  1119→  1119→  1119→- aplicação é atômica e auditada;
+  1120→  1120→  1120→- versões antigas continuam funcionais.
+  1121→  1121→  1121→
+  1122→  1122→  1122→### Tarefas
+  1123→  1123→  1123→
+  1124→  1124→  1124→- estados e bloqueios respeitados;
+  1125→  1125→  1125→- recorrência não duplica ocorrências;
+  1126→  1126→  1126→- checklists/documentos obrigatórios bloqueiam conclusão;
+  1127→  1127→  1127→- filtros, lote e histórico funcionam.
+  1128→  1128→  1128→
+  1129→  1129→  1129→### Documentos
+  1130→  1130→  1130→
+  1131→  1131→  1131→- upload privado e versionado;
+  1132→  1132→  1132→- solicitação, aprovação e rejeição notificam corretamente;
+  1133→  1133→  1133→- acesso respeita tenant e portal.
+  1134→  1134→  1134→
+  1135→  1135→  1135→### Calendário
+  1136→  1136→  1136→
+  1137→  1137→  1137→- visualizações e filtros corretos;
+  1138→  1138→  1138→- fuso e dia útil respeitados;
+  1139→  1139→  1139→- mudança recorrente não corrompe histórico.
+  1140→  1140→  1140→
+  1141→  1141→  1141→### Portal
+  1142→  1142→  1142→
+  1143→  1143→  1143→- cliente vê somente dados liberados;
+  1144→  1144→  1144→- upload e comentários funcionam;
+  1145→  1145→  1145→- revogação corta acesso imediatamente.
+  1146→  1146→  1146→
+  1147→  1147→  1147→### Billing
+  1148→  1148→  1148→
+  1149→  1149→  1149→- checkout, webhook, upgrade, downgrade, falha e cancelamento testados;
+  1150→  1150→  1150→- cotas aplicadas sem perda de dados;
+  1151→  1151→  1151→- eventos duplicados não duplicam efeitos.
+  1152→  1152→  1152→
+  1153→  1153→  1153→### Notificações
+  1154→  1154→  1154→
+  1155→  1155→  1155→- templates renderizam;
+  1156→  1156→  1156→- preferências e janela silenciosa respeitadas;
+  1157→  1157→  1157→- não há duplicação;
+  1158→  1158→  1158→- logs e reprocessamento disponíveis.
+  1159→  1159→  1159→
+  1160→  1160→  1160→## 21. Estratégia de testes
+  1161→  1161→  1161→
+  1162→  1162→  1162→- unitários para serviços e regras de datas;
+  1163→  1163→  1163→- integração para banco, storage, Stripe e Celery;
+  1164→  1164→  1164→- autorização para cada papel;
+  1165→  1165→  1165→- testes de isolamento multitenant;
+  1166→  1166→  1166→- propriedade para recorrências e datas;
+  1167→  1167→  1167→- E2E para contratação, onboarding, template, cliente, execução, portal e cancelamento;
+  1168→  1168→  1168→- contrato de API/OpenAPI;
+  1169→  1169→  1169→- acessibilidade automatizada e revisão manual;
+  1170→  1170→  1170→- carga em dashboard, listas, aplicação de template e jobs;
+  1171→  1171→  1171→- segurança de upload, IDs, sessões e webhooks;
+  1172→  1172→  1172→- migrações reversíveis quando possível.
+  1173→  1173→  1173→
+  1174→  1174→  1174→Cobertura não substitui cenários; fluxos críticos devem ter testes explícitos.
+  1175→  1175→  1175→
+  1176→  1176→  1176→## 22. Implantação
+  1177→  1177→  1177→
+  1178→  1178→  1178→### 22.1 Ambientes
+  1179→  1179→  1179→
+  1180→  1180→  1180→Desenvolvimento, homologação e produção separados. Produção usa PostgreSQL, Redis, Celery worker/beat, storage privado, SMTP transacional, Stripe live e HTTPS.
+  1181→  1181→  1181→
+  1182→  1182→  1182→### 22.2 Pipeline
+  1183→  1183→  1183→
+  1184→  1184→  1184→1. lint e formatação;
+  1185→  1185→  1185→2. testes;
+  1186→  1186→  1186→3. verificação de migrações;
+  1187→  1187→  1187→4. build;
+  1188→  1188→  1188→5. deploy em homologação;
+  1189→  1189→  1189→6. smoke tests;
+  1190→  1190→  1190→7. aprovação;
+  1191→  1191→  1191→8. backup;
+  1192→  1192→  1192→9. deploy produção;
+  1193→  1193→  1193→10. migração;
+  1194→  1194→  1194→11. health checks e observação.
+  1195→  1195→  1195→
+  1196→  1196→  1196→### 22.3 Feature flags
+  1197→  1197→  1197→
+  1198→  1198→  1198→Usar para portal, importações, relatórios, plano anual, trial e recursos Enterprise, permitindo lançamento gradual.
+  1199→  1199→  1199→
+  1200→  1200→  1200→## 23. Fases de entrega
+  1201→  1201→  1201→
+  1202→  1202→  1202→### Fase 0 — Fundação
+  1203→  1203→  1203→
+  1204→  1204→  1204→Clone, execução, auditoria da base, identidade, ambientes, apps e permissões.
+  1205→  1205→  1205→
+  1206→  1206→  1206→### Fase 1 — Núcleo
+  1207→  1207→  1207→
+  1208→  1208→  1208→Organizações, equipe, clientes, departamentos, templates, versões e aplicação.
+  1209→  1209→  1209→
+  1210→  1210→  1210→### Fase 2 — Operação diária
+  1211→  1211→  1211→
+  1212→  1212→  1212→Tarefas, checklist, datas, recorrências, calendário, dashboard e notificações.
+  1213→  1213→  1213→
+  1214→  1214→  1214→### Fase 3 — Retenção
+  1215→  1215→  1215→
+  1216→  1216→  1216→Documentos, portal, importação, relatórios e auditoria acessível.
+  1217→  1217→  1217→
+  1218→  1218→  1218→### Fase 4 — Venda
+  1219→  1219→  1219→
+  1220→  1220→  1220→Site, planos, checkout, cotas, trial, billing, administração e onboarding comercial.
+  1221→  1221→  1221→
+  1222→  1222→  1222→### Fase 5 — Endurecimento
+  1223→  1223→  1223→
+  1224→  1224→  1224→E2E, carga, segurança, LGPD, observabilidade, backups, documentação e piloto.
+  1225→  1225→  1225→
+  1226→  1226→  1226→O desenvolvimento pode ocorrer em frentes paralelas após contratos de dados e permissões, mas integração deve ocorrer continuamente.
+  1227→  1227→  1227→
+  1228→  1228→  1228→## 24. Fora do MVP e evolução
+  1229→  1229→  1229→
+  1230→  1230→  1230→### Nível 2
+  1231→  1231→  1231→
+  1232→  1232→  1232→- integrações contábeis;
+  1233→  1233→  1233→- WhatsApp e SMS;
+  1234→  1234→  1234→- assinatura eletrônica;
+  1235→  1235→  1235→- OCR e extração de validade;
+  1236→  1236→  1236→- automações condicionais;
+  1237→  1237→  1237→- personalização avançada;
+  1238→  1238→  1238→- marketplace privado;
+  1239→  1239→  1239→- API pública completa.
+  1240→  1240→  1240→
+  1241→  1241→  1241→### Nível 3
+  1242→  1242→  1242→
+  1243→  1243→  1243→- base regulatória estruturada;
+  1244→  1244→  1244→- motor de regras por CNAE/localização;
+  1245→  1245→  1245→- monitoramento de fontes oficiais;
+  1246→  1246→  1246→- IA assistiva e preventiva;
+  1247→  1247→  1247→- score de risco;
+  1248→  1248→  1248→- marketplace de prestadores;
+  1249→  1249→  1249→- recomendações sujeitas a validação humana.
+  1250→  1250→  1250→
+  1251→  1251→  1251→Essas extensões não devem contaminar o escopo nem a comunicação do MVP.
+  1252→  1252→  1252→
+  1253→  1253→  1253→## 25. Definition of Done do MVP
+  1254→  1254→  1254→
+  1255→  1255→  1255→O MVP estará pronto para venda quando:
+  1256→  1256→  1256→
+  1257→  1257→  1257→1. um escritório contratar sem intervenção técnica;
+  1258→  1258→  1258→2. concluir onboarding;
+  1259→  1259→  1259→3. importar ao menos 100 clientes;
+  1260→  1260→  1260→4. convidar equipe;
+  1261→  1261→  1261→5. criar e publicar template;
+  1262→  1262→  1262→6. aplicar template em menos de cinco minutos;
+  1263→  1263→  1263→7. executar tarefas e recorrências;
+  1264→  1264→  1264→8. solicitar e receber documentos;
+  1265→  1265→  1265→9. operar calendário e alertas;
+  1266→  1266→  1266→10. conceder portal seguro;
+  1267→  1267→  1267→11. consultar relatórios e auditoria;
+  1268→  1268→  1268→12. alterar plano e pagar;
+  1269→  1269→  1269→13. ter dados isolados e recuperáveis;
+  1270→  1270→  1270→14. passar pelos testes críticos;
+  1271→  1271→  1271→15. possuir documentação de operação, suporte e incidentes.
+  1272→  1272→  1272→
+  1273→  1273→  1273→## 26. Instrução final ao agente
+  1274→  1274→  1274→
+  1275→  1275→  1275→Não iniciar por telas isoladas nem por um projeto vazio. O primeiro comando de obtenção da base deve ser:
+  1276→  1276→  1276→
+  1277→  1277→  1277→`git clone https://github.com/alc-br/company-core.git`
+  1278→  1278→  1278→
+  1279→  1279→  1279→Todo recurso deve ser classificado como:
+  1280→  1280→  1280→
+  1281→  1281→  1281→- **reutilização do Company Core**;
+  1282→  1282→  1282→- **extensão controlada do Core**; ou
+  1283→  1283→  1283→- **novo domínio Company Radar**.
+  1284→  1284→  1284→
+  1285→  1285→  1285→Antes de implementar, o agente deve produzir mapa de reutilização, modelo de dados, matriz de permissões, contratos de serviços, plano de migrações e sequência de épicos. Nenhuma funcionalidade do MVP pode depender de IA, fonte legislativa externa ou integração contábil ainda inexistente.
+  1286→  1286→  1286→
+  1287→  1287→  1287→O produto deve sair como uma solução completa de organização operacional para escritórios contábeis, com cobrança real, onboarding, rotina diária, portal, documentos, alertas e histórico suficiente para que o cliente incorpore o Company Radar à operação e tenha motivos concretos para continuar assinando.
+  1288→  1288→  1288→

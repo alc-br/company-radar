@@ -1,0 +1,844 @@
+     1→"""Camada de serviço do módulo de Tarefas do Company Radar.
+     2→
+     3→Operações de estado, atribuição, checklist, comentários e criação de tarefas avulsas."""
+     4→
+     5→import logging
+     6→from django.db import transaction
+     7→from django.utils import timezone
+     8→
+     9→from apps.radar_tasks.models import (
+    10→    Task,
+    11→    TaskAssignment,
+    12→    TaskDependency,
+    13→    ChecklistItem,
+    14→    TaskComment,
+    15→    TaskFollower,
+    16→    TaskStatus,
+    17→    ChecklistStatus,
+    18→    TaskOrigin,
+    19→)
+    20→from apps.common.exceptions import (
+    21→    NotFoundException,
+    22→    PermissionDeniedError,
+    23→    ValidationError,
+    24→    ServiceException,
+    25→)
+    26→from apps.audit.services import AuditService
+    27→
+    28→logger = logging.getLogger(__name__)
+    29→
+    30→
+    31→# ─── Máquina de estados ─────────────────────────────────────────────
+    32→
+    33→# Transições válidas: de → [para, …]
+    34→_TRANSICOES_VALIDAS = {
+    35→    TaskStatus.A_FAZER: [
+    36→        TaskStatus.EM_ANDAMENTO,
+    37→        TaskStatus.AGUARDANDO_CLIENTE,
+    38→        TaskStatus.AGUARDANDO_TERCEIRO,
+    39→        TaskStatus.BLOQUEADA,
+    40→        TaskStatus.CANCELADA,
+    41→    ],
+    42→    TaskStatus.EM_ANDAMENTO: [
+    43→        TaskStatus.A_FAZER,
+    44→        TaskStatus.AGUARDANDO_CLIENTE,
+    45→        TaskStatus.AGUARDANDO_TERCEIRO,
+    46→        TaskStatus.BLOQUEADA,
+    47→        TaskStatus.CONCLUIDA,
+    48→        TaskStatus.CANCELADA,
+    49→    ],
+    50→    TaskStatus.AGUARDANDO_CLIENTE: [
+    51→        TaskStatus.EM_ANDAMENTO,
+    52→        TaskStatus.A_FAZER,
+    53→        TaskStatus.BLOQUEADA,
+    54→        TaskStatus.CONCLUIDA,
+    55→        TaskStatus.CANCELADA,
+    56→    ],
+    57→    TaskStatus.AGUARDANDO_TERCEIRO: [
+    58→        TaskStatus.EM_ANDAMENTO,
+    59→        TaskStatus.A_FAZER,
+    60→        TaskStatus.BLOQUEADA,
+    61→        TaskStatus.CONCLUIDA,
+    62→        TaskStatus.CANCELADA,
+    63→    ],
+    64→    TaskStatus.BLOQUEADA: [
+    65→        TaskStatus.A_FAZER,
+    66→        TaskStatus.EM_ANDAMENTO,
+    67→        TaskStatus.CANCELADA,
+    68→    ],
+    69→    TaskStatus.CONCLUIDA: [
+    70→        TaskStatus.A_FAZER,
+    71→    ],
+    72→    TaskStatus.CANCELADA: [],
+    73→}
+    74→
+    75→
+    76→# ─── TaskService ────────────────────────────────────────────────────
+    77→
+    78→
+    79→class TaskService:
+    80→    """Camada de serviço para operações com Tarefas."""
+    81→
+    82→    # ── Mudanças de estado ──────────────────────────────────────
+    83→
+    84→    @staticmethod
+    85→    @transaction.atomic
+    86→    def start_task(task, user):
+    87→        """Inicia uma tarefa: muda status para EM_ANDAMENTO e registra started_at."""
+    88→        if task.status not in (TaskStatus.A_FAZER, TaskStatus.BLOQUEADA):
+    89→            raise ValidationError(
+    90→                message='Somente tarefas "A Fazer" ou "Bloqueada" podem ser iniciadas.',
+    91→                errors={'status': ['Transição inválida.']},
+    92→            )
+    93→
+    94→        task.status = TaskStatus.EM_ANDAMENTO
+    95→        task.started_at = timezone.now()
+    96→        task.save(update_fields=['status', 'started_at', 'updated_at'])
+    97→
+    98→        AuditService.log(
+    99→            action='task.started',
+   100→            target_type='task',
+   101→            target_id=task.uuid,
+   102→            actor=user,
+   103→            organization=task.organization,
+   104→            metadata={'title': task.title},
+   105→        )
+   106→
+   107→        logger.info('Tarefa iniciada: uuid=%s, por=%d', task.uuid, user.id)
+   108→        return task
+   109→
+   110→    @staticmethod
+   111→    @transaction.atomic
+   112→    def complete_task(task, user, evidence=None):
+   113→        """Conclui uma tarefa após validações de dependências, checklist e documentos.
+   114→
+   115→        Parâmetros:
+   116→            task: instância de Task
+   117→            user: usuário que conclui
+   118→            evidence: (opcional) evidência textual ou URL
+   119→        """
+   120→        if task.status == TaskStatus.CONCLUIDA:
+   121→            raise ValidationError(
+   122→                message='Esta tarefa já está concluída.',
+   123→                errors={'status': ['Tarefa já concluída.']},
+   124→            )
+   125→
+   126→        # 1. Verificar dependências bloqueantes
+   127→        deps_bloqueantes = TaskDependency.objects.filter(
+   128→            target_task=task,
+   129→            organization=task.organization,
+   130→        ).select_related('source_task')
+   131→
+   132→        for dep in deps_bloqueantes:
+   133→            if dep.source_task.status != TaskStatus.CONCLUIDA:
+   134→                raise ValidationError(
+   135→                    message=(
+   136→                        'Não é possível concluir. A tarefa '
+   137→                        f'"{dep.source_task.title}" ainda não foi concluída.'
+   138→                    ),
+   139→                    errors={'dependencies': [dep.source_task.title]},
+   140→                )
+   141→
+   142→        # 2. Verificar checklist obrigatório
+   143→        itens_obrigatorios_pendentes = ChecklistItem.objects.filter(
+   144→            task=task,
+   145→            organization=task.organization,
+   146→            is_required=True,
+   147→            status=ChecklistStatus.PENDENTE,
+   148→        )
+   149→        if itens_obrigatorios_pendentes.exists():
+   150→            nomes = list(itens_obrigatorios_pendentes.values_list('title', flat=True))
+   151→            raise ValidationError(
+   152→                message=f'Existem {len(nomes)} item(ns) obrigatório(s) pendente(s) no checklist.',
+   153→                errors={'checklist': nomes},
+   154→            )
+   155→
+   156→        # 3. Verificar documentos obrigatórios aprovados
+   157→        try:
+   158→            from apps.radar_documents.models import DocumentRequest, DocumentRequestStatus
+   159→            from apps.radar_templates.models import TemplateDocumentRequirement
+   160→
+   161→            solicitacoes_pendentes = 0
+   162→            if task.template_task:
+   163→                requisitos = TemplateDocumentRequirement.objects.filter(
+   164→                    template_task=task.template_task,
+   165→                    organization=task.organization,
+   166→                    is_required=True,
+   167→                )
+   168→                for req in requisitos:
+   169→                    pendente = DocumentRequest.objects.filter(
+   170→                        task=task,
+   171→                        organization=task.organization,
+   172→                        template_requirement=req,
+   173→                    ).exclude(
+   174→                        status__in=[DocumentRequestStatus.APROVADO, DocumentRequestStatus.CANCELADO],
+   175→                    ).exists()
+   176→                    if pendente:
+   177→                        solicitacoes_pendentes += 1
+   178→
+   179→            if solicitacoes_pendentes > 0:
+   180→                raise ValidationError(
+   181→                    message=(
+   182→                        f'Existem {solicitacoes_pendentes} solicitação(ões) de documento(s) '
+   183→                        f'pendente(s) que precisam ser aprovadas.'
+   184→                    ),
+   185→                    errors={'documents': [f'{solicitacoes_pendentes} documento(s) pendente(s)']},
+   186→                )
+   187→        except ValidationError:
+   188→            raise
+   189→        except Exception:
+   190→            pass  # radar_documents pode não estar disponível
+   191→
+   192→        # 4. Registrar conclusão
+   193→        task.status = TaskStatus.CONCLUIDA
+   194→        task.completed_at = timezone.now()
+   195→        task.completed_by = user
+   196→        task.save(update_fields=['status', 'completed_at', 'completed_by', 'updated_at'])
+   197→
+   198→        metadata = {'title': task.title}
+   199→        if evidence:
+   200→            metadata['evidence'] = evidence
+   201→
+   202→        AuditService.log(
+   203→            action='task.completed',
+   204→            target_type='task',
+   205→            target_id=task.uuid,
+   206→            actor=user,
+   207→            organization=task.organization,
+   208→            metadata=metadata,
+   209→        )
+   210→
+   211→        # 5. Desbloquear tarefas dependentes
+   212→        tarefas_desbloqueadas = 0
+   213→        dependentes = TaskDependency.objects.filter(
+   214→            source_task=task,
+   215→            organization=task.organization,
+   216→        ).select_related('target_task')
+   217→
+   218→        for dep in dependentes:
+   219→            alvo = dep.target_task
+   220→            # Verifica se TODAS as dependências da tarefa alvo estão concluídas
+   221→            todas_concluidas = not TaskDependency.objects.filter(
+   222→                target_task=alvo,
+   223→                organization=alvo.organization,
+   224→            ).exclude(source_task__status=TaskStatus.CONCLUIDA).exists()
+   225→
+   226→            if todas_concluidas and alvo.status == TaskStatus.BLOQUEADA:
+   227→                alvo.status = TaskStatus.A_FAZER
+   228→                alvo.save(update_fields=['status', 'updated_at'])
+   229→                tarefas_desbloqueadas += 1
+   230→
+   231→                AuditService.log(
+   232→                    action='task.unblocked',
+   233→                    target_type='task',
+   234→                    target_id=alvo.uuid,
+   235→                    actor=user,
+   236→                    organization=alvo.organization,
+   237→                    metadata={'unblocked_by_task': str(task.uuid)},
+   238→                )
+   239→
+   240→                # Notificar seguidores da tarefa desbloqueada
+   241→                _notificar_seguidores_tarefa(
+   242→                    alvo,
+   243→                    template_code='task_unblocked',
+   244→                    context={'task_title': alvo.title, 'unblocked_by': task.title},
+   245→                )
+   246→
+   247→        if tarefas_desbloqueadas > 0:
+   248→            logger.info(
+   249→                'Tarefa concluída desbloqueou %d tarefa(s): uuid=%s',
+   250→                tarefas_desbloqueadas, task.uuid,
+   251→            )
+   252→
+   253→        logger.info('Tarefa concluída: uuid=%s, por=%d', task.uuid, user.id)
+   254→        return task
+   255→
+   256→    @staticmethod
+   257→    @transaction.atomic
+   258→    def reopen_task(task, user, reason):
+   259→        """Reabre uma tarefa concluída, exigindo motivo."""
+   260→        if not reason or not reason.strip():
+   261→            raise ValidationError(
+   262→                message='O motivo da reabertura é obrigatório.',
+   263→                errors={'reason': ['Motivo obrigatório.']},
+   264→            )
+   265→
+   266→        if task.status != TaskStatus.CONCLUIDA:
+   267→            raise ValidationError(
+   268→                message='Somente tarefas concluídas podem ser reabertas.',
+   269→                errors={'status': ['Apenas tarefas concluídas podem ser reabertas.']},
+   270→            )
+   271→
+   272→        task.status = TaskStatus.A_FAZER
+   273→        task.completed_at = None
+   274→        task.completed_by = None
+   275→        task.save(update_fields=['status', 'completed_at', 'completed_by', 'updated_at'])
+   276→
+   277→        AuditService.log(
+   278→            action='task.reopened',
+   279→            target_type='task',
+   280→            target_id=task.uuid,
+   281→            actor=user,
+   282→            organization=task.organization,
+   283→            metadata={'title': task.title, 'reason': reason.strip()},
+   284→        )
+   285→
+   286→        logger.info('Tarefa reaberta: uuid=%s, por=%d, motivo=%s', task.uuid, user.id, reason[:80])
+   287→        return task
+   288→
+   289→    @staticmethod
+   290→    @transaction.atomic
+   291→    def cancel_task(task, user, reason):
+   292→        """Cancela uma tarefa, registrando o motivo."""
+   293→        if not reason or not reason.strip():
+   294→            raise ValidationError(
+   295→                message='O motivo do cancelamento é obrigatório.',
+   296→                errors={'reason': ['Motivo obrigatório.']},
+   297→            )
+   298→
+   299→        if task.status == TaskStatus.CANCELADA:
+   300→            raise ValidationError(
+   301→                message='Esta tarefa já está cancelada.',
+   302→                errors={'status': ['Tarefa já cancelada.']},
+   303→            )
+   304→
+   305→        if task.status == TaskStatus.CONCLUIDA:
+   306→            raise ValidationError(
+   307→                message='Tarefas concluídas não podem ser canceladas. Reabra primeiro.',
+   308→                errors={'status': ['Use reabrir antes de cancelar.']},
+   309→            )
+   310→
+   311→        task.status = TaskStatus.CANCELADA
+   312→        task.save(update_fields=['status', 'updated_at'])
+   313→
+   314→        AuditService.log(
+   315→            action='task.cancelled',
+   316→            target_type='task',
+   317→            target_id=task.uuid,
+   318→            actor=user,
+   319→            organization=task.organization,
+   320→            metadata={'title': task.title, 'reason': reason.strip()},
+   321→        )
+   322→
+   323→        logger.info('Tarefa cancelada: uuid=%s, por=%d', task.uuid, user.id)
+   324→        return task
+   325→
+   326→    @staticmethod
+   327→    @transaction.atomic
+   328→    def change_status(task, user, new_status):
+   329→        """Altera o status de uma tarefa com validação de máquina de estados."""
+   330→        transicoes = _TRANSICOES_VALIDAS.get(task.status, [])
+   331→        if new_status not in transicoes:
+   332→            status_atual = task.get_status_display()
+   333→            raise ValidationError(
+   334→                message=f'Transição inválida de "{status_atual}" para o status solicitado.',
+   335→                errors={'status': [f'Transição de {task.status} para {new_status} não permitida.']},
+   336→            )
+   337→
+   338→        status_anterior = task.status
+   339→        task.status = new_status
+   340→        task.save(update_fields=['status', 'updated_at'])
+   341→
+   342→        AuditService.log(
+   343→            action='task.status_changed',
+   344→            target_type='task',
+   345→            target_id=task.uuid,
+   346→            actor=user,
+   347→            organization=task.organization,
+   348→            metadata={
+   349→                'title': task.title,
+   350→                'from': status_anterior,
+   351→                'to': new_status,
+   352→            },
+   353→        )
+   354→
+   355→        logger.info(
+   356→            'Status alterado: uuid=%s, %d → %d, por=%d',
+   357→            task.uuid, status_anterior, new_status, user.id,
+   358→        )
+   359→        return task
+   360→
+   361→    # ── Prazo ────────────────────────────────────────────────────
+   362→
+   363→    @staticmethod
+   364→    @transaction.atomic
+   365→    def update_due_date(task, user, new_date, reason=None):
+   366→        """Atualiza o prazo de uma tarefa.
+   367→
+   368→        Se a tarefa estiver vencida, exige motivo da alteração.
+   369→        """
+   370→        if task.status in (TaskStatus.CONCLUIDA, TaskStatus.CANCELADA):
+   371→            raise ValidationError(
+   372→                message='Não é possível alterar o prazo de tarefas concluídas ou canceladas.',
+   373→                errors={'status': ['Tarefa inativa.']},
+   374→            )
+   375→
+   376→        if task.is_overdue and (not reason or not reason.strip()):
+   377→            raise ValidationError(
+   378→                message='Tarefa vencida. Informe o motivo da alteração do prazo.',
+   379→                errors={'reason': ['Motivo obrigatório para tarefa vencida.']},
+   380→            )
+   381→
+   382→        data_anterior = task.due_date
+   383→        task.due_date = new_date
+   384→        task.save(update_fields=['due_date', 'updated_at'])
+   385→
+   386→        metadata = {
+   387→            'title': task.title,
+   388→            'previous_due_date': str(data_anterior) if data_anterior else None,
+   389→            'new_due_date': str(new_date),
+   390→        }
+   391→        if reason:
+   392→            metadata['reason'] = reason.strip()
+   393→
+   394→        AuditService.log(
+   395→            action='task.due_date_updated',
+   396→            target_type='task',
+   397→            target_id=task.uuid,
+   398→            actor=user,
+   399→            organization=task.organization,
+   400→            metadata=metadata,
+   401→        )
+   402→
+   403→        logger.info(
+   404→            'Prazo atualizado: uuid=%s, %s → %s, por=%d',
+   405→            task.uuid, data_anterior, new_date, user.id,
+   406→        )
+   407→        return task
+   408→
+   409→    # ── Atribuições ──────────────────────────────────────────────
+   410→
+   411→    @staticmethod
+   412→    @transaction.atomic
+   413→    def assign_task(task, user_id, assigned_by, role='responsavel'):
+   414→        """Atribui um usuário a uma tarefa.
+   415→
+   416→        Se já existir atribuição ativa para o mesmo usuário, apenas reativa.
+   417→        """
+   418→        from apps.users.models import CustomUser
+   419→
+   420→        try:
+   421→            user = CustomUser.objects.get(id=user_id)
+   422→        except CustomUser.DoesNotExist:
+   423→            raise NotFoundException(
+   424→                message=f'Usuário com id={user_id} não encontrado.',
+   425→                resource_type='user',
+   426→                resource_id=user_id,
+   427→            )
+   428→
+   429→        atribuicao, created = TaskAssignment.objects.update_or_create(
+   430→            task=task,
+   431→            user=user,
+   432→            organization=task.organization,
+   433→            defaults={'role': role, 'is_active': True},
+   434→        )
+   435→
+   436→        if created:
+   437→            AuditService.log(
+   438→                action='task.assigned',
+   439→                target_type='task_assignment',
+   440→                target_id=atribuicao.uuid,
+   441→                actor=assigned_by,
+   442→                organization=task.organization,
+   443→                metadata={
+   444→                    'task_uuid': str(task.uuid),
+   445→                    'task_title': task.title,
+   446→                    'assigned_user_id': user.id,
+   447→                    'assigned_user_name': user.get_full_name(),
+   448→                    'role': role,
+   449→                },
+   450→            )
+   451→
+   452→            # Notificar o usuário atribuído
+   453→            try:
+   454→                from apps.sdk.notifications import NotificationSDK
+   455→                NotificationSDK.send(
+   456→                    channel='email',
+   457→                    recipient=user.email,
+   458→                    template_code='task_assigned',
+   459→                    context={
+   460→                        'task_title': task.title,
+   461→                        'assigned_by': assigned_by.get_full_name(),
+   462→                        'role': role,
+   463→                        'task_uuid': str(task.uuid),
+   464→                    },
+   465→                )
+   466→            except Exception as exc:
+   467→                logger.warning('Falha ao notificar atribuição: %s', exc)
+   468→
+   469→            logger.info(
+   470→                'Usuário %d atribuído à tarefa %s como %s',
+   471→                user.id, task.uuid, role,
+   472→            )
+   473→        else:
+   474→            logger.info(
+   475→                'Atribuição reativada: usuário %d na tarefa %s',
+   476→                user.id, task.uuid,
+   477→            )
+   478→
+   479→        return atribuicao
+   480→
+   481→    @staticmethod
+   482→    @transaction.atomic
+   483→    def remove_assignment(task, user_id, removed_by):
+   484→        """Remove (desativa) uma atribuição de usuário de uma tarefa."""
+   485→        try:
+   486→            atribuicao = TaskAssignment.objects.get(
+   487→                task=task,
+   488→                user_id=user_id,
+   489→                organization=task.organization,
+   490→                is_active=True,
+   491→            )
+   492→        except TaskAssignment.DoesNotExist:
+   493→            raise NotFoundException(
+   494→                message='Atribuição não encontrada ou já inativa.',
+   495→                resource_type='task_assignment',
+   496→            )
+   497→
+   498→        atribuicao.is_active = False
+   499→        atribuicao.save(update_fields=['is_active', 'updated_at'])
+   500→
+   501→        AuditService.log(
+   502→            action='task.unassigned',
+   503→            target_type='task_assignment',
+   504→            target_id=atribuicao.uuid,
+   505→            actor=removed_by,
+   506→            organization=task.organization,
+   507→            metadata={
+   508→                'task_uuid': str(task.uuid),
+   509→                'removed_user_id': user_id,
+   510→            },
+   511→        )
+   512→
+   513→        logger.info(
+   514→            'Atribuição removida: usuário %d da tarefa %s',
+   515→            user_id, task.uuid,
+   516→        )
+   517→        return atribuicao
+   518→
+   519→    # ── Comentários ──────────────────────────────────────────────
+   520→
+   521→    @staticmethod
+   522→    @transaction.atomic
+   523→    def add_comment(task, user, body, mentions=None, is_internal=False):
+   524→        """Adiciona um comentário a uma tarefa."""
+   525→        if not body or not body.strip():
+   526→            raise ValidationError(
+   527→                message='O corpo do comentário é obrigatório.',
+   528→                errors={'body': ['Comentário vazio.']},
+   529→            )
+   530→
+   531→        comentario = TaskComment(
+   532→            organization=task.organization,
+   533→            task=task,
+   534→            author=user,
+   535→            body=body.strip(),
+   536→            mentions=mentions or [],
+   537→            is_internal=is_internal,
+   538→        )
+   539→        comentario.full_clean()
+   540→        comentario.save()
+   541→
+   542→        # Notificar usuários mencionados
+   543→        if mentions:
+   544→            _notificar_mencoes(task, user, mentions)
+   545→
+   546→        # Notificar seguidores da tarefa
+   547→        _notificar_seguidores_tarefa(
+   548→            task,
+   549→            template_code='task_new_comment',
+   550→            context={
+   551→                'task_title': task.title,
+   552→                'author_name': user.get_full_name(),
+   553→                'comment_preview': body[:100],
+   554→            },
+   555→        )
+   556→
+   557→        AuditService.log(
+   558→            action='task.comment_added',
+   559→            target_type='task_comment',
+   560→            target_id=comentario.uuid,
+   561→            actor=user,
+   562→            organization=task.organization,
+   563→            metadata={
+   564→                'task_uuid': str(task.uuid),
+   565→                'is_internal': is_internal,
+   566→                'mentions_count': len(mentions or []),
+   567→            },
+   568→        )
+   569→
+   570→        logger.info(
+   571→            'Comentário adicionado: task=%s, por=%d',
+   572→            task.uuid, user.id,
+   573→        )
+   574→        return comentario
+   575→
+   576→    # ── Seguidores ───────────────────────────────────────────────
+   577→
+   578→    @staticmethod
+   579→    @transaction.atomic
+   580→    def add_follower(task, user):
+   581→        """Adiciona um seguidor a uma tarefa."""
+   582→        seguidor, created = TaskFollower.objects.get_or_create(
+   583→            task=task,
+   584→            user=user,
+   585→            organization=task.organization,
+   586→        )
+   587→
+   588→        if created:
+   589→            logger.info('Seguidor adicionado: user=%d, task=%s', user.id, task.uuid)
+   590→        return seguidor
+   591→
+   592→    @staticmethod
+   593→    @transaction.atomic
+   594→    def remove_follower(task, user):
+   595→        """Remove um seguidor de uma tarefa."""
+   596→        deletados, _ = TaskFollower.objects.filter(
+   597→            task=task,
+   598→            user=user,
+   599→            organization=task.organization,
+   600→        ).delete()
+   601→
+   602→        if deletados > 0:
+   603→            logger.info('Seguidor removido: user=%d, task=%s', user.id, task.uuid)
+   604→        return deletados
+   605→
+   606→    # ── Checklist ────────────────────────────────────────────────
+   607→
+   608→    @staticmethod
+   609→    @transaction.atomic
+   610→    def toggle_checklist_item(item, user):
+   611→        """ Alterna o status de um item de checklist entre PENDENTE e CONCLUIDO."""
+   612→        if item.status == ChecklistStatus.PENDENTE:
+   613→            item.status = ChecklistStatus.CONCLUIDO
+   614→            item.completed_by = user
+   615→            item.completed_at = timezone.now()
+   616→        else:
+   617→            item.status = ChecklistStatus.PENDENTE
+   618→            item.completed_by = None
+   619→            item.completed_at = None
+   620→
+   621→        item.save(
+   622→            update_fields=['status', 'completed_by', 'completed_at', 'updated_at'],
+   623→        )
+   624→
+   625→        AuditService.log(
+   626→            action='checklist.toggled',
+   627→            target_type='checklist_item',
+   628→            target_id=item.uuid,
+   629→            actor=user,
+   630→            organization=item.organization,
+   631→            metadata={
+   632→                'task_uuid': str(item.task.uuid),
+   633→                'item_title': item.title,
+   634→                'new_status': item.get_status_display(),
+   635→            },
+   636→        )
+   637→
+   638→        logger.info(
+   639→            'Checklist toggled: item=%s, status=%d, por=%d',
+   640→            item.uuid, item.status, user.id,
+   641→        )
+   642→        return item
+   643→
+   644→    # ── Criação de tarefa avulsa ─────────────────────────────────
+   645→
+   646→    @staticmethod
+   647→    @transaction.atomic
+   648→    def create_task_avulsa(org, user, **kwargs) -> Task:
+   649→        """Cria uma tarefa avulsa (não proveniente de template)."""
+   650→        titulo = kwargs.get('title', '').strip()
+   651→        if not titulo:
+   652→            raise ValidationError(
+   653→                message='O título da tarefa é obrigatório.',
+   654→                errors={'title': ['Título obrigatório.']},
+   655→            )
+   656→
+   657→        tarefa = Task(
+   658→            organization=org,
+   659→            title=titulo,
+   660→            description=kwargs.get('description', ''),
+   661→            client=kwargs.get('client'),
+   662→            department=kwargs.get('department'),
+   663→            category=kwargs.get('category', ''),
+   664→            priority=kwargs.get('priority', Task.priority.field.default),
+   665→            status=kwargs.get('status', TaskStatus.A_FAZER),
+   666→            due_date=kwargs.get('due_date'),
+   667→            estimated_duration=kwargs.get('estimated_duration'),
+   668→            is_visible_in_portal=kwargs.get('is_visible_in_portal', False),
+   669→            portal_instructions=kwargs.get('portal_instructions', ''),
+   670→            team_instructions=kwargs.get('team_instructions', ''),
+   671→            origin=TaskOrigin.AVULSA,
+   672→            internal_notes=kwargs.get('internal_notes', ''),
+   673→        )
+   674→        tarefa.full_clean()
+   675→        tarefa.save()
+   676→
+   677→        # Atribuir responsável se informado
+   678→        responsavel_id = kwargs.get('responsible_id')
+   679→        if responsavel_id:
+   680→            TaskService.assign_task(tarefa, responsavel_id, user, role='responsavel')
+   681→
+   682→        # Criar itens de checklist se informados
+   683→        checklist_data = kwargs.get('checklist_items')
+   684→        if checklist_data and isinstance(checklist_data, list):
+   685→            for idx, item_data in enumerate(checklist_data):
+   686→                item_titulo = item_data.get('title', '').strip()
+   687→                if not item_titulo:
+   688→                    continue
+   689→                ChecklistItem(
+   690→                    organization=org,
+   691→                    task=tarefa,
+   692→                    title=item_titulo,
+   693→                    description=item_data.get('description', ''),
+   694→                    is_required=item_data.get('is_required', True),
+   695→                    display_order=item_data.get('display_order', idx),
+   696→                ).save()
+   697→
+   698→        AuditService.log(
+   699→            action='task.created_avulsa',
+   700→            target_type='task',
+   701→            target_id=tarefa.uuid,
+   702→            actor=user,
+   703→            organization=org,
+   704→            metadata={'title': tarefa.title, 'origin': 'avulsa'},
+   705→        )
+   706→
+   707→        logger.info(
+   708→            'Tarefa avulsa criada: uuid=%s, por=%d, org=%d',
+   709→            tarefa.uuid, user.id, org.id,
+   710→        )
+   711→        return tarefa
+   712→
+   713→    # ── Atualização em massa ─────────────────────────────────────
+   714→
+   715→    @staticmethod
+   716→    @transaction.atomic
+   717→    def bulk_update_status(task_ids, user, new_status, **kwargs):
+   718→        """Atualiza o status de múltiplas tarefas, com auditoria por item.
+   719→
+   720→        Retorna dicionário com contadores de sucesso e erros.
+   721→        """
+   722→        from apps.radar_tasks.selectors import TaskSelectors
+   723→
+   724→        resultados = {'sucesso': [], 'erros': [], 'total_processadas': 0}
+   725→
+   726→        if not task_ids:
+   727→            return resultados
+   728→
+   729→        tarefas = Task.objects.filter(
+   730→            uuid__in=task_ids,
+   731→            organization=user.organization if hasattr(user, 'organization') else None,
+   732→            is_deleted=False,
+   733→        )
+   734→
+   735→        # Se org foi passado explicitamente
+   736→        org = kwargs.get('organization')
+   737→        if org:
+   738→            tarefas = tarefas.filter(organization=org)
+   739→
+   740→        for tarefa in tarefas:
+   741→            try:
+   742→                TaskService.change_status(tarefa, user, new_status)
+   743→                resultados['sucesso'].append(str(tarefa.uuid))
+   744→            except (ValidationError, ServiceException) as exc:
+   745→                resultados['erros'].append({
+   746→                    'uuid': str(tarefa.uuid),
+   747→                    'erro': str(exc.message),
+   748→                })
+   749→            resultados['total_processadas'] += 1
+   750→
+   751→        logger.info(
+   752→            'Bulk status update: new_status=%d, sucesso=%d, erros=%d',
+   753→            new_status, len(resultados['sucesso']), len(resultados['erros']),
+   754→        )
+   755→        return resultados
+   756→
+   757→    # ── Fila do usuário ───────────────────────────────────────────
+   758→
+   759→    @staticmethod
+   760→    def get_my_queue(user, org):
+   761→        """Retorna tarefas atribuídas ao usuário, ordenadas por:
+   762→
+   763→        1. Vencidas primeiro
+   764→        2. Prazo mais próximo
+   765→        3. Prioridade mais alta
+   766→        """
+   767→        from django.db.models import Case, When, Value, IntegerField
+   768→
+   769→        tarefas = (
+   770→            Task.objects.filter(
+   771→                organization=org,
+   772→                is_deleted=False,
+   773→                assignments__user=user,
+   774→                assignments__is_active=True,
+   775→            )
+   776→            .exclude(status__in=[TaskStatus.CONCLUIDA, TaskStatus.CANCELADA])
+   777→            .select_related('client', 'department')
+   778→            .prefetch_related('assignments__user', 'checklist_items')
+   779→            .annotate(
+   780→                _is_overdue=Case(
+   781→                    When(is_overdue=True, then=Value(1)),
+   782→                    default=Value(0),
+   783→                    output_field=IntegerField(),
+   784→                ),
+   785→            )
+   786→            .order_by('-_is_overdue', 'due_date', '-priority')
+   787→        )
+   788→        return tarefas
+   789→
+   790→
+   791→# ─── Helpers internos ───────────────────────────────────────────────
+   792→
+   793→
+   794→def _notificar_seguidores_tarefa(task, template_code, context):
+   795→    """Notifica todos os seguidores ativos de uma tarefa."""
+   796→    try:
+   797→        from apps.sdk.notifications import NotificationSDK
+   798→
+   799→        seguidores = TaskFollower.objects.filter(
+   800→            task=task,
+   801→            organization=task.organization,
+   802→        ).select_related('user')
+   803→
+   804→        for seguidor in seguidores:
+   805→            if seguidor.user.email:
+   806→                NotificationSDK.send(
+   807→                    channel='email',
+   808→                    recipient=seguidor.user.email,
+   809→                    template_code=template_code,
+   810→                    context=context,
+   811→                )
+   812→    except Exception as exc:
+   813→        logger.warning('Falha ao notificar seguidores da tarefa %s: %s', task.uuid, exc)
+   814→
+   815→
+   816→def _notificar_mencoes(task, author, mentions):
+   817→    """Notifica usuários mencionados em um comentário."""
+   818→    try:
+   819→        from apps.users.models import CustomUser
+   820→        from apps.sdk.notifications import NotificationSDK
+   821→
+   822→        user_ids = []
+   823→        for m in mentions:
+   824→            if isinstance(m, dict) and 'user_id' in m:
+   825→                user_ids.append(m['user_id'])
+   826→            elif isinstance(m, int):
+   827→                user_ids.append(m)
+   828→
+   829→        users = CustomUser.objects.filter(id__in=user_ids).exclude(id=author.id)
+   830→        for user in users:
+   831→            if user.email:
+   832→                NotificationSDK.send(
+   833→                    channel='email',
+   834→                    recipient=user.email,
+   835→                    template_code='task_mention',
+   836→                    context={
+   837→                        'task_title': task.title,
+   838→                        'mentioned_by': author.get_full_name(),
+   839→                        'task_uuid': str(task.uuid),
+   840→                    },
+   841→                )
+   842→    except Exception as exc:
+   843→        logger.warning('Falha ao notificar menções na tarefa %s: %s', task.uuid, exc)
+   844→
