@@ -19,29 +19,43 @@ export async function GET(request: NextRequest) {
     const templates = await db.template.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
+      include: {
+        department: { select: { id: true, name: true, description: true } },
+        _count: { select: { tasks: true } },
+      },
     })
     return NextResponse.json(templates)
-  } catch {
-    return NextResponse.json({ error: 'Erro ao buscar templates' }, { status: 500 })
+  } catch (error) {
+    console.error('Failed to fetch templates:', error)
+    return NextResponse.json({ error: 'Failed to fetch templates' }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    const { department, _count, tasks, ...templateData } = body
+
     const template = await db.template.create({
       data: {
-        organizationId: body.organizationId || 'org-default',
-        name: body.name,
-        description: body.description,
-        category: body.category,
-        department: body.department,
-        steps: JSON.stringify(body.steps || []),
-        isPublished: body.isPublished || false,
+        organizationId: templateData.organizationId || 'org-default',
+        name: templateData.name,
+        description: templateData.description,
+        category: templateData.category,
+        departmentId: templateData.departmentId || null,
+        isPublished: templateData.isPublished || false,
+        version: templateData.version || 1,
+        parentTemplateId: templateData.parentTemplateId || null,
+        steps: JSON.stringify(templateData.steps || []),
+      },
+      include: {
+        department: { select: { id: true, name: true, description: true } },
+        _count: { select: { tasks: true } },
       },
     })
     return NextResponse.json(template, { status: 201 })
-  } catch {
-    return NextResponse.json({ error: 'Erro ao criar template' }, { status: 500 })
+  } catch (error) {
+    console.error('Failed to create template:', error)
+    return NextResponse.json({ error: 'Failed to create template' }, { status: 500 })
   }
 }
