@@ -1,32 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+function generateResetToken(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json()
 
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    if (!email || typeof email !== 'string') {
+      return NextResponse.json(
+        { error: 'E-mail é obrigatório' },
+        { status: 400 }
+      )
     }
 
-    const user = await db.user.findUnique({ where: { email } })
-    if (!user) {
-      // Return success even if user doesn't exist to prevent email enumeration
-      return NextResponse.json({ message: 'If the email exists, a reset link has been sent' })
+    const normalizedEmail = email.toLowerCase().trim()
+
+    // Always find user but don't reveal existence
+    const user = await db.user.findUnique({ where: { email: normalizedEmail } })
+
+    if (user) {
+      const token = generateResetToken()
+      const resetExpires = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+
+      await db.user.update({
+        where: { id: user.id },
+        data: { resetToken: token, resetExpires },
+      })
+
+      // In production, send email with reset link here
+      // console.log(`Reset token for ${user.email}: ${token}`)
     }
 
-    // Generate random token
-    const token = Buffer.from(`${Date.now()}-${Math.random().toString(36).slice(2)}`).toString('base64url')
-    const resetExpires = new Date(Date.now() + 60 * 60 * 1000) // 1 hour from now
-
-    await db.user.update({
-      where: { id: user.id },
-      data: { resetToken: token, resetExpires },
+    // Always return success to prevent email enumeration
+    return NextResponse.json({
+      message: 'Se o e-mail estiver cadastrado, um link de redefinição será enviado.',
     })
-
-    return NextResponse.json({ message: 'If the email exists, a reset link has been sent' })
   } catch (error) {
     console.error('Forgot password error:', error)
-    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Erro ao processar solicitação. Tente novamente.' },
+      { status: 500 }
+    )
   }
 }

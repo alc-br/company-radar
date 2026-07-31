@@ -13,45 +13,65 @@ model User {
   email          String    @unique
   passwordHash   String
   name           String
+  lastName       String    @default("")
   avatar         String?
   emailVerified  Boolean   @default(false)
+  verifyToken    String?   @unique
+  verifyExpires  DateTime?
   resetToken     String?   @unique
   resetExpires   DateTime?
   activeOrgId    String?
+  termsAccepted  Boolean   @default(false)
+  termsVersion   String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   memberships    OrgMember[]
   auditLogs      AuditLog[]
   notifications  UserNotification[]
+  notifPrefs     NotificationPreference[]
   activeOrg      Organization? @relation("ActiveOrg", fields: [activeOrgId], references: [id])
 }
 
 // ─── Organization ────────────────────────────────────────
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  cnpj      String?
-  email     String?
-  phone     String?
-  logo      String?
-  address   String?
-  city      String?
-  state     String?
-  plan      String   @default("free")
-  stripeCustomerId String?
+  id                  String   @id @default(cuid())
+  name                String
+  tradeName           String?
+  cnpj                String?
+  email               String?
+  phone               String?
+  logo                String?
+  primaryColor        String   @default("#2563eb")
+  address             String?
+  city                String?
+  state               String?
+  zipCode             String?
+  timezone            String   @default("America/Sao_Paulo")
+  plan                String   @default("free")
+  stripeCustomerId    String?
   stripeSubscriptionId String?
-  settings  String   @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  clients    Client[]
-  templates  Template[]
-  members    OrgMember[]
-  tags       Tag[]
-  departments Department[]
-  documentTypes DocumentType[]
-  calendars  CalendarEvent[]
-  tasks      Task[]
-  activeUsers User[] @relation("ActiveOrg")
+  onboardingCompleted Boolean  @default(false)
+  onboardingStep      Int      @default(0)
+  settings            String   @default("{}")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  clients             Client[]
+  templates           Template[]
+  templateVersions    TemplateVersion[]
+  members             OrgMember[]
+  tags                Tag[]
+  departments         Department[]
+  businessUnits       BusinessUnit[]
+  documentTypes       DocumentType[]
+  calendars           CalendarEvent[]
+  holidays            Holiday[]
+  tasks               Task[]
+  documents           Document[]
+  docRequests         DocumentRequest[]
+  applications        TemplateApplication[]
+  subscriptions       Subscription[]
+  exportJobs          ExportJob[]
+  activeUsers         User[] @relation("ActiveOrg")
 }
 
 model OrgMember {
@@ -60,19 +80,24 @@ model OrgMember {
   userId         String?
   name           String
   email          String
-  role           String   @default("collaborator") // owner, admin, gestor, collaborator, financeiro
+  role           String   @default("collaborator")
   permissions    String   @default("{}")
+  departmentId   String?
+  businessUnitId String?
   invitedBy      String?
   inviteToken    String?   @unique
   inviteExpires  DateTime?
-  status         String   @default("active") // active, invited, inactive
+  status         String   @default("active")
+  lastAccess     DateTime?
   organization   Organization @relation(fields: [organizationId], references: [id])
   user           User?      @relation(fields: [userId], references: [id])
+  department     Department? @relation(fields: [departmentId], references: [id])
+  businessUnit   BusinessUnit? @relation(fields: [businessUnitId], references: [id])
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 }
 
-// ─── Tags & Departments ──────────────────────────────────
+// ─── Tags, Departments, Business Units ────────────────────
 model Tag {
   id             String   @id @default(cuid())
   organizationId String
@@ -80,7 +105,7 @@ model Tag {
   color          String   @default("#6b7280")
   organization   Organization @relation(fields: [organizationId], references: [id])
   clients        ClientTag[]
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime @default(now())
 }
 
 model Department {
@@ -88,46 +113,75 @@ model Department {
   organizationId String
   name           String
   description    String?
+  color          String   @default("#3b82f6")
+  managerId      String?
   organization   Organization @relation(fields: [organizationId], references: [id])
   templates      Template[]
-  createdAt      DateTime  @default(now())
+  members        OrgMember[]
+  createdAt      DateTime @default(now())
+}
+
+model BusinessUnit {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  members        OrgMember[]
+  createdAt      DateTime @default(now())
 }
 
 model DocumentType {
   id             String   @id @default(cuid())
   organizationId String
   name           String
+  category       String?
   description    String?
+  validityDays   Int?
+  maxFileSize    Int?
+  allowedFormats String   @default("pdf,doc,docx,xls,xlsx,jpg,png")
   required       Boolean  @default(false)
   organization   Organization @relation(fields: [organizationId], references: [id])
   documents      Document[]
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime @default(now())
 }
 
 // ─── Clients ─────────────────────────────────────────────
 model Client {
-  id             String   @id @default(cuid())
-  organizationId String
-  name           String
-  cnpj           String   @unique
-  tradeName      String?
-  email          String?
-  phone          String?
-  address        String?
-  city           String?
-  state          String?
-  status         String   @default("active") // active, inactive, archived
-  segment        String?
-  notes          String?
-  portalAccess   Boolean  @default(false)
-  portalPassword String?
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  contacts       Contact[]
-  tasks          Task[]
-  documents      Document[]
-  tags           ClientTag[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                String   @id @default(cuid())
+  organizationId    String
+  name              String
+  tradeName         String?
+  cnpj              String
+  ie                String?  // Inscricao Estadual
+  im                String?  // Inscricao Municipal
+  cnae              String?
+  taxRegime         String?  // Simples, Lucro Presumido, Lucro Real
+  companySize       String?  // ME, EPP, Media Empresa, Grande Empresa
+  segment           String?
+  email             String?
+  phone             String?
+  address           String?
+  city              String?
+  state             String?
+  zipCode           String?
+  openDate          String?  // YYYY-MM-DD
+  status            String   @default("active")
+  responsibleId     String?
+  notes             String?
+  portalAccess      Boolean  @default(false)
+  serviceStartDate  String?
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  contacts          Contact[]
+  tasks             Task[]
+  documents         Document[]
+  docRequests       DocumentRequest[]
+  tags              ClientTag[]
+  applications      TemplateApplication[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  @@index([organizationId, status])
+  @@unique([organizationId, cnpj])
 }
 
 model ClientTag {
@@ -139,62 +193,130 @@ model ClientTag {
 }
 
 model Contact {
-  id        String   @id @default(cuid())
-  clientId  String
-  name      String
-  email     String?
-  phone     String?
-  role      String?
-  notes     String?
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  clientId      String
+  name          String
+  email         String?
+  phone         String?
+  role          String?
+  hasPortalAccess Boolean @default(false)
+  portalToken   String?   @unique
+  notes         String?
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
-// ─── Templates ───────────────────────────────────────────
+// ─── Templates with Versioning ───────────────────────────
 model Template {
   id             String   @id @default(cuid())
   organizationId String
+  code           String?  // Codigo interno unico por org
   name           String
   description    String?
+  purpose        String?  // Finalidade
   category       String?
+  color          String   @default("#2563eb")
+  icon           String?
   departmentId   String?
-  isPublished    Boolean  @default(false)
-  version        Int      @default(1)
-  parentTemplateId String?
-  steps          String   @default("[]") // JSON [{title, description, responsible, daysOffset, documentType?, checklist?}]
+  responsibleId  String?
+  instructions   String?
+  warning        String?  // Aviso juridico
+  defaultPeriodicity String? // monthly, quarterly, yearly
+  variables      String   @default("[]") // JSON [{name, label, type, required}]
+  status         String   @default("draft") // draft, published, archived
+  currentVersion Int      @default(0)
   organization   Organization @relation(fields: [organizationId], references: [id])
   department     Department? @relation(fields: [departmentId], references: [id])
+  versions       TemplateVersion[]
+  applications   TemplateApplication[]
   tasks          Task[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  @@unique([organizationId, code])
+}
+
+model TemplateVersion {
+  id             String   @id @default(cuid())
+  organizationId String
+  templateId     String
+  versionNumber  Int
+  name           String?
+  description    String?
+  stages         String   @default("[]") // JSON: full immutable snapshot
+  publishedAt    DateTime?
+  publishedBy    String?
+  isCurrent      Boolean  @default(false)
+  template       Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  applications   TemplateApplication[]
+  createdAt      DateTime  @default(now())
+  @@unique([templateId, versionNumber])
+}
+
+// ─── Template Application to Client ──────────────────────
+model TemplateApplication {
+  id              String   @id @default(cuid())
+  organizationId  String
+  templateId      String
+  templateVersionId String
+  clientId        String
+  baseDate        String   // YYYY-MM-DD
+  variables       String   @default("{}") // JSON: filled variables
+  appliedBy       String?
+  status          String   @default("active")
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  template        Template        @relation(fields: [templateId], references: [id])
+  templateVersion TemplateVersion  @relation(fields: [templateVersionId], references: [id])
+  client          Client          @relation(fields: [clientId], references: [id])
+  tasks           Task[]
+  createdAt       DateTime  @default(now())
 }
 
 // ─── Tasks ───────────────────────────────────────────────
 model Task {
-  id             String   @id @default(cuid())
-  organizationId String
-  clientId       String
-  title          String
-  description    String?
-  status         String   @default("pending") // pending, in_progress, completed, cancelled, overdue
-  priority       String   @default("medium") // low, medium, high, urgent
-  dueDate        DateTime?
-  completedAt    DateTime?
-  assignedTo     String?
-  templateId     String?
-  templateStepIndex Int?
-  recurrenceRule String?  // JSON {frequency: monthly|quarterly|yearly, dayOfMonth, monthOfYear}
-  parentTaskId   String?
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  template       Template? @relation(fields: [templateId], references: [id])
-  checklist      TaskChecklist[]
-  comments       TaskComment[]
-  subtasks       Task[]    @relation("Subtasks")
-  parentTask     Task?     @relation("Subtasks", fields: [parentTaskId], references: [id])
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  organizationId      String
+  clientId            String
+  title               String
+  description         String?
+  status              String   @default("a_fazer")
+  priority            String   @default("medium")
+  category            String?
+  dueDate             DateTime?
+  completedAt         DateTime?
+  assignedTo          String?  // memberId name
+  assignedToId        String?
+  reviewerId          String?
+  templateId          String?
+  templateVersionId   String?
+  templateApplicationId String?
+  templateStageIndex  Int?
+  templateTaskIndex   Int?
+  recurrenceRule      String?
+  recurrenceParentId  String?
+  parentTaskId        String?
+  isOptional          Boolean  @default(false)
+  portalVisible       Boolean  @default(false)
+  portalInstructions  String?
+  estimatedMinutes    Int?
+  departmentId        String?
+  organization        Organization       @relation(fields: [organizationId], references: [id])
+  client              Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  template            Template?          @relation(fields: [templateId], references: [id])
+  application         TemplateApplication? @relation(fields: [templateApplicationId], references: [id])
+  checklist           TaskChecklist[]
+  comments            TaskComment[]
+  followers           TaskFollower[]
+  dependencies        TaskDependency[]  @relation("TaskDeps")
+  dependsOn           TaskDependency[]  @relation("DependsOn")
+  subtasks            Task[]             @relation("Subtasks")
+  parentTask          Task?              @relation("Subtasks", fields: [parentTaskId], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  @@index([organizationId, status])
+  @@index([organizationId, dueDate])
+  @@index([organizationId, clientId])
 }
 
 model TaskChecklist {
@@ -202,6 +324,7 @@ model TaskChecklist {
   taskId    String
   text      String
   done      Boolean  @default(false)
+  required  Boolean  @default(false)
   order     Int      @default(0)
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -211,10 +334,27 @@ model TaskComment {
   id        String   @id @default(cuid())
   taskId    String
   userId    String?
+  memberId  String?
   userName  String
   content   String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+}
+
+model TaskFollower {
+  taskId    String
+  memberId  String
+  task      Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  @@id([taskId, memberId])
+}
+
+model TaskDependency {
+  taskId         String
+  dependsOnId    String
+  blockingType   String @default("finish_start") // finish_start, start_start
+  task           Task  @relation("TaskDeps", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTask  Task  @relation("DependsOn", fields: [dependsOnId], references: [id], onDelete: Cascade)
+  @@id([taskId, dependsOnId])
 }
 
 // ─── Documents ───────────────────────────────────────────
@@ -224,14 +364,39 @@ model Document {
   clientId       String
   name           String
   typeId         String?
-  status         String   @default("pending") // pending, received, approved, rejected, expired
-  dueDate        DateTime?
+  taskId         String?
+  status         String   @default("pending")
+  competence     String?  // MM/YYYY
+  issueDate      String?
+  validityDate   String?
   filePath       String?
   fileSize       Int?
   mimeType       String?
   notes          String?
-  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  portalVisible  Boolean  @default(false)
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  client         Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   documentType   DocumentType? @relation(fields: [typeId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  @@index([organizationId, status])
+}
+
+model DocumentRequest {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  title          String
+  instructions   String?
+  requestedBy    String?
+  dueDate        String?
+  status         String   @default("solicitado") // solicitado, recebido, aprovado, rejeitado
+  acceptedFormats String   @default("pdf,doc,docx,xls,xlsx,jpg,png")
+  rejectionReason String?
+  contactId      String?
+  documentId     String?  // when client uploads
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  client         Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 }
@@ -246,11 +411,23 @@ model CalendarEvent {
   endDate        DateTime?
   allDay         Boolean  @default(false)
   color          String?
-  type           String   @default("task") // task, deadline, meeting, holiday
-  relatedId      String?  // taskId or other reference
+  type           String   @default("task")
+  relatedId      String?
+  createdById    String?
   organization   Organization @relation(fields: [organizationId], references: [id])
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+model Holiday {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  date           String   // YYYY-MM-DD
+  recurring      Boolean  @default(true)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime  @default(now())
+  @@unique([organizationId, date])
 }
 
 // ─── Notifications ───────────────────────────────────────
@@ -259,67 +436,119 @@ model UserNotification {
   userId    String
   title     String
   message   String
-  type      String   @default("info") // info, warning, success, urgent
+  type      String   @default("info")
+  priority  String   @default("normal")
   link      String?
   read      Boolean  @default(false)
+  readAt    DateTime?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+  @@index([userId, read])
+}
+
+model NotificationPreference {
+  userId       String
+  eventType    String
+  inApp        Boolean  @default(true)
+  email        Boolean  @default(false)
+  dailyDigest  Boolean  @default(false)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, eventType])
 }
 
 // ─── Audit ───────────────────────────────────────────────
 model AuditLog {
-  id        String   @id @default(cuid())
-  userId    String?
-  userName  String?
-  action    String   // client.create, task.complete, template.publish, etc.
-  entity    String?  // Client, Task, Template...
-  entityId  String?
-  detail    String?
-  ip        String?
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id])
+  id          String   @id @default(cuid())
+  userId      String?
+  userName    String?
+  action      String
+  entity      String?
+  entityId    String?
+  detail      String?
+  diff        String?  // JSON diff
+  ip          String?
+  userAgent   String?
+  requestId   String?
+  organizationId String?
+  createdAt   DateTime  @default(now())
+  user        User?    @relation(fields: [userId], references: [id])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([entity, action])
 }
 
 // ─── Billing / Plans ─────────────────────────────────────
 model Plan {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  price       Float
-  annualPrice Float?
-  maxClients  Int
-  maxUsers    Int
-  features    String   @default("[]") // JSON array of feature strings
-  active      Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  price           Float
+  annualPrice     Float?
+  maxClients      Int
+  maxUsers        Int
+  maxStorageMb    Int      @default(1024)
+  maxExports      Int      @default(50)
+  maxPortalContacts Int    @default(10)
+  maxTemplates    Int      @default(20)
+  features        String   @default("[]")
+  highlight       Boolean  @default(false)
+  active          Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  stripePriceId   String?
+  stripeAnnualPriceId String?
+  subscriptions       Subscription[]
+  createdAt       DateTime @default(now())
 }
 
 model Subscription {
-  id                String   @id @default(cuid())
-  organizationId    String   @unique
-  planId            String
-  status            String   @default("active") // active, cancelled, past_due
-  currentPeriodEnd  DateTime
-  stripeSubscriptionId String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                     String    @id @default(cuid())
+  organizationId         String    @unique
+  planId                 String
+  status                 String    @default("active")
+  billingCycle           String    @default("monthly") // monthly, annual
+  currentPeriodStart     DateTime  @default(now())
+  currentPeriodEnd       DateTime
+  trialEnd               DateTime?
+  cancelledAt            DateTime?
+  stripeSubscriptionId   String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  plan                   Plan       @relation(fields: [planId], references: [id])
+  organization           Organization @relation(fields: [organizationId], references: [id])
+}
+
+// ─── Export Jobs ─────────────────────────────────────────
+model ExportJob {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  type           String   // clients, tasks, documents, audit
+  format         String   // csv, xlsx
+  filters        String   @default("{}")
+  status         String   @default("pending") // pending, processing, completed, failed
+  filePath       String?
+  fileSize       Int?
+  errorMessage   String?
+  completedAt    DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 // ─── Public Pages ────────────────────────────────────────
 model PublicPage {
-  id    String @id @default(cuid())
-  slug  String @unique
-  title String
+  id      String @id @default(cuid())
+  slug    String @unique
+  title   String
   content String
-  order Int @default(0)
- active Boolean @default(true)
+  order   Int    @default(0)
+  active  Boolean @default(true)
 }
 
 model FAQ {
   id       String @id @default(cuid())
   question String
   answer   String
-  order    Int @default(0)
+  order    Int    @default(0)
   active   Boolean @default(true)
 }

@@ -6,14 +6,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const action = searchParams.get('action') || ''
     const entity = searchParams.get('entity') || ''
+    const actor = searchParams.get('actor') || ''
+    const ip = searchParams.get('ip') || ''
     const startDate = searchParams.get('startDate') || ''
     const endDate = searchParams.get('endDate') || ''
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
 
     const where: Record<string, unknown> = {}
-    if (action) where.action = action
+    if (action) where.action = { contains: action }
     if (entity) where.entity = entity
+    if (actor) where.userName = { contains: actor }
+    if (ip) where.ip = { contains: ip }
     if (startDate || endDate) {
       const dateFilter: Record<string, unknown> = {}
       if (startDate) dateFilter.gte = new Date(startDate)
@@ -31,13 +35,7 @@ export async function GET(request: NextRequest) {
       db.auditLog.count({ where }),
     ])
 
-    return NextResponse.json({
-      logs,
-      total,
-      page,
-      limit,
-      pages: Math.ceil(total / limit),
-    })
+    return NextResponse.json({ logs, total, page, limit, pages: Math.ceil(total / limit) })
   } catch (error) {
     console.error('Audit GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch audit logs' }, { status: 500 })

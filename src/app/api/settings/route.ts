@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const include = searchParams.get('include') || ''
+
     const org = await db.organization.findFirst({
       orderBy: { createdAt: 'asc' },
+      ...(include === 'all'
+        ? {
+            include: {
+              tags: true,
+              documentTypes: true,
+              departments: true,
+              _count: { select: { clients: true, members: true, documents: true, tasks: true } },
+            },
+          }
+        : {}),
     })
+
     if (!org) {
       return NextResponse.json({ error: 'No organization found' }, { status: 404 })
     }
@@ -34,7 +48,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No organization found' }, { status: 404 })
     }
 
-    const { settings: newSettings, ...orgFields } = body
+    const { settings: newSettings, id, createdAt, updatedAt, ...orgFields } = body
 
     const updateData: Record<string, unknown> = { ...orgFields }
     if (newSettings) {
