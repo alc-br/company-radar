@@ -28,10 +28,16 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [session] = useState<PortalSession | null>(() => getPortalSession())
+  const isLoginPage = pathname === '/portal/login'
 
   useEffect(() => {
-    if (!session) { router.replace('/login') }
-  }, [session, router])
+    if (!session && !isLoginPage) { router.replace('/portal/login') }
+  }, [session, isLoginPage, router])
+
+  // A tela de login do portal nao usa o cabecalho/nav autenticado nem o guard de sessao.
+  if (isLoginPage) {
+    return <>{children}</>
+  }
 
   if (!session) {
     return (
@@ -44,9 +50,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   }
 
   function handleLogout() {
+    fetch('/api/v1/portal/logout', { method: 'POST' }).catch(() => {})
     localStorage.removeItem('cr_portal')
     toast.success('Você saiu do portal.')
-    router.replace('/login')
+    router.replace('/portal/login')
   }
 
   function isActive(href: string) {
