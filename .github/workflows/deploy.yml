@@ -1,0 +1,18 @@
+name: Deploy Company Radar
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: company-radar-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, company-radar]
+    timeout-minutes: 20
+    steps:
+      - name: Run deploy script on the VPS
+        run: sudo /usr/local/bin/company-radar-deploy.sh
