@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Radar, Home, Clock, FileText, CalendarDays, UserCircle, LogOut } from 'lucide-react'
+import { Radar, Home, Clock, FileText, CalendarDays, Megaphone, UserCircle, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 
@@ -19,6 +19,7 @@ const navItems = [
   { label: 'Pendências', href: '/portal/pendencias', icon: Clock },
   { label: 'Documentos', href: '/portal/documentos', icon: FileText },
   { label: 'Cronograma', href: '/portal/cronograma', icon: CalendarDays },
+  { label: 'Comunicados', href: '/portal/comunicados', icon: Megaphone },
   { label: 'Perfil', href: '/portal/perfil', icon: UserCircle },
 ]
 
