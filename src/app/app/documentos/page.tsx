@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   Upload, Search, Filter, Download, FileText, MoreHorizontal,
   Eye, Trash2, Clock, CheckCircle2, XCircle, AlertCircle, Archive,
-  Loader2, X, ChevronDown, Send, FileSpreadsheet,
+  Loader2, X, ChevronDown, Send, FileSpreadsheet, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,7 +41,7 @@ const statusIcon: Record<string, React.ElementType> = {
   aprovado: CheckCircle2, rejeitado: XCircle, arquivado: Archive, pending: Clock,
 }
 
-type Document = { id: string; name: string; clientId: string; status: string; validityDate: string | null; updatedAt: string; client?: { id: string; name: string }; documentType?: { id: string; name: string } }
+type Document = { id: string; name: string; clientId: string; status: string; validityDate: string | null; updatedAt: string; url?: string | null; client?: { id: string; name: string }; documentType?: { id: string; name: string } }
 type Client = { id: string; name: string }
 type DocType = { id: string; name: string }
 
@@ -58,6 +58,10 @@ export default function DocumentosPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadForm, setUploadForm] = useState({ name: '', clientId: '', typeId: '', file: null as File | null, notes: '' })
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [rejectingDoc, setRejectingDoc] = useState<Document | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -68,11 +72,11 @@ export default function DocumentosPage() {
       const [docRes, clientRes, typeRes] = await Promise.all([
         fetch(`/api/documents?${params.toString()}`),
         fetch('/api/clients'),
-        fetch('/api/clients'),
+        fetch('/api/document-types'),
       ])
-      if (docRes.ok) { const d = await docRes.json(); setDocuments(Array.isArray(d) ? d : []) }
-      if (clientRes.ok) { const d = await clientRes.json(); setClients(Array.isArray(d) ? d : []) }
-      if (typeRes.ok) { const d = await typeRes.json(); setDocTypes(Array.isArray(d) ? d : []) }
+      if (docRes.ok) { const d = await docRes.json(); setDocuments(Array.isArray(d) ? d : (d.documents || [])) }
+      if (clientRes.ok) { const d = await clientRes.json(); setClients(Array.isArray(d) ? d : (d.clients || [])) }
+      if (typeRes.ok) { const d = await typeRes.json(); setDocTypes(Array.isArray(d) ? d : (d.documentTypes || [])) }
     } catch { toast.error('Erro ao carregar documentos') } finally { setLoading(false) }
   }, [filterClient, filterType, filterStatus])
 
@@ -102,6 +106,79 @@ export default function DocumentosPage() {
         fetchData()
       } else { const err = await res.json(); toast.error(err.error || 'Erro ao enviar') }
     } catch { toast.error('Erro ao enviar documento') } finally { setUploading(false) }
+  }
+
+  function handleView(doc: Document) {
+    if (!doc.url) { toast.error('Este documento não tem um arquivo anexado.'); return }
+    window.open(doc.url, '_blank', 'noopener,noreferrer')
+  }
+
+  function handleDownload(doc: Document) {
+    if (!doc.url) { toast.error('Este documento não tem um arquivo anexado.'); return }
+    const a = document.createElement('a')
+    a.href = doc.url
+    a.download = doc.name
+    a.click()
+  }
+
+  async function handleDelete(doc: Document) {
+    if (!confirm(`Excluir "${doc.name}"? Esta ação não pode ser desfeita.`)) return
+    setActionLoading(doc.id)
+    try {
+      const res = await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      toast.success('Documento excluído')
+      fetchData()
+    } catch {
+      toast.error('Erro ao excluir documento')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleApprove(doc: Document) {
+    setActionLoading(doc.id)
+    try {
+      const res = await fetch(`/api/documents/${doc.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'aprovado' }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success('Documento aprovado')
+      fetchData()
+    } catch {
+      toast.error('Erro ao aprovar documento')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  function openRejectDialog(doc: Document) {
+    setRejectingDoc(doc)
+    setRejectReason('')
+    setRejectOpen(true)
+  }
+
+  async function handleReject() {
+    if (!rejectingDoc) return
+    if (!rejectReason.trim()) { toast.error('Informe o motivo da rejeição.'); return }
+    setActionLoading(rejectingDoc.id)
+    try {
+      const res = await fetch(`/api/documents/${rejectingDoc.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejeitado', rejectionReason: rejectReason.trim() }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success('Documento rejeitado')
+      setRejectOpen(false)
+      fetchData()
+    } catch {
+      toast.error('Erro ao rejeitar documento')
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   async function handleExport() {
@@ -239,10 +316,27 @@ export default function DocumentosPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem><Eye className="mr-2 h-4 w-4" /> Visualizar</DropdownMenuItem>
-                            <DropdownMenuItem><Download className="mr-2 h-4 w-4" /> Baixar</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleView(doc)}><Eye className="mr-2 h-4 w-4" /> Visualizar</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDownload(doc)}><Download className="mr-2 h-4 w-4" /> Baixar</DropdownMenuItem>
+                            {(doc.status === 'recebido' || doc.status === 'em_análise') && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleApprove(doc)} disabled={actionLoading === doc.id}>
+                                  <ThumbsUp className="mr-2 h-4 w-4" /> Aprovar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openRejectDialog(doc)} disabled={actionLoading === doc.id}>
+                                  <ThumbsDown className="mr-2 h-4 w-4" /> Rejeitar
+                                </DropdownMenuItem>
+                              </>
+                            )}
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => handleDelete(doc)}
+                              disabled={actionLoading === doc.id}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -293,6 +387,32 @@ export default function DocumentosPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setUploadOpen(false)}>Cancelar</Button>
             <Button onClick={handleUpload} disabled={uploading}>{uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Enviar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rejeitar documento</DialogTitle>
+            <DialogDescription>
+              {rejectingDoc && `"${rejectingDoc.name}" voltará como pendência para o cliente reenviar.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label>Motivo da rejeição *</Label>
+            <Textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Explique o que precisa ser corrigido..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleReject} disabled={actionLoading === rejectingDoc?.id}>
+              {actionLoading === rejectingDoc?.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Rejeitar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
