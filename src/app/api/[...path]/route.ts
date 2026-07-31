@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
  * Everything else lands here and is forwarded to Django.
  */
 
-const DJANGO_API_URL = process.env.DJANGO_API_URL || 'http://localhost:8000/api/v1'
+const DJANGO_BASE_URL = (process.env.DJANGO_API_URL || 'http://localhost:8000').replace(/\/api\/v1\/?$/, '')
 
 const HOP_BY_HOP = new Set([
   'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
@@ -34,7 +34,7 @@ function rewriteCookies(setCookie: string | null, req: NextRequest): string | nu
 async function proxy(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
   const pathStr = path.join('/')
-  const url = `${DJANGO_API_URL}/${pathStr}${request.nextUrl.search}`
+  const url = `${DJANGO_BASE_URL}/api/v1/${pathStr}${request.nextUrl.search}`
 
   const headers = stripHopByHop(request.headers)
   // Forward auth cookies for session authentication

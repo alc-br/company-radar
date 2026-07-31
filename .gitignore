@@ -5,3 +5,4 @@ dev.log
 tool-results/
 *.db
 .env
+actions-runner/
