@@ -1,4 +1,4 @@
-'client'
+'use client'
 
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { usePathname, useRouter } from 'next/navigation'

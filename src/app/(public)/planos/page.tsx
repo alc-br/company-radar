@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -50,7 +50,7 @@ function formatBRL(value: number): string {
   }).format(value)
 }
 
-export default function PlanosPage() {
+function PlanosContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [plans, setPlans] = useState<Plan[]>([])
@@ -262,5 +262,13 @@ export default function PlanosPage() {
         </div>
       </section>
     </div>
+  )
+}
+
+export default function PlanosPage() {
+  return (
+    <Suspense fallback={null}>
+      <PlanosContent />
+    </Suspense>
   )
 }
