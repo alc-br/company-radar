@@ -44,6 +44,8 @@ export default function ConfiguracoesPage() {
   const [crudOpen, setCrudOpen] = useState(false)
   const [crudForm, setCrudForm] = useState({ name: '', color: '#6b7280', category: '', allowedFormats: 'pdf,doc,docx,xls,xlsx,jpg,png' })
   const [crudType, setCrudType] = useState<'tag' | 'doctype'>('tag')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [crudSaving, setCrudSaving] = useState(false)
   const [alerts, setAlerts] = useState<Record<string, boolean>>({ alert_30: true, alert_15: true, alert_7: true, alert_3: false, alert_1: false, alert_0: false })
   const [tags, setTags] = useState<Array<{ id: string; name: string; color: string }>>([])
   const [docTypes, setDocTypes] = useState<Array<{ id: string; name: string; category: string | null; allowedFormats: string }>>([])
@@ -97,10 +99,56 @@ export default function ConfiguracoesPage() {
     } catch { toast.error('Erro ao exportar') }
   }
 
-  function openCrud(type: typeof crudType, edit?: { name: string; color: string; category?: string }) {
+  function openCrud(type: typeof crudType, edit?: { id: string; name: string; color: string; category?: string }) {
     setCrudType(type)
+    setEditingId(edit?.id ?? null)
     setCrudForm(edit ? { name: edit.name, color: edit.color, category: edit.category || '', allowedFormats: 'pdf,doc,docx,xls,xlsx,jpg,png' } : { name: '', color: '#6b7280', category: '', allowedFormats: 'pdf,doc,docx,xls,xlsx,jpg,png' })
     setCrudOpen(true)
+  }
+
+  async function saveCrud() {
+    if (!crudForm.name.trim()) { toast.error('Informe um nome.'); return }
+    setCrudSaving(true)
+    try {
+      const isTag = crudType === 'tag'
+      const url = editingId
+        ? `/api/${isTag ? 'tags' : 'document-types'}/${editingId}`
+        : `/api/${isTag ? 'tags' : 'document-types'}`
+      const body = isTag
+        ? { name: crudForm.name.trim(), color: crudForm.color }
+        : { name: crudForm.name.trim(), category: crudForm.category.trim(), allowedFormats: crudForm.allowedFormats }
+      const res = await fetch(url, {
+        method: editingId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); toast.error(err.error || 'Erro ao salvar'); return }
+      toast.success('Salvo com sucesso!')
+      setCrudOpen(false)
+      fetchOrg()
+    } catch {
+      toast.error('Erro ao salvar')
+    } finally {
+      setCrudSaving(false)
+    }
+  }
+
+  async function deleteCrud() {
+    if (!editingId) return
+    if (!confirm(`Excluir esta ${crudType === 'tag' ? 'tag' : 'tipo de documento'}?`)) return
+    setCrudSaving(true)
+    try {
+      const url = `/api/${crudType === 'tag' ? 'tags' : 'document-types'}/${editingId}`
+      const res = await fetch(url, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      toast.success('Excluído com sucesso')
+      setCrudOpen(false)
+      fetchOrg()
+    } catch {
+      toast.error('Erro ao excluir')
+    } finally {
+      setCrudSaving(false)
+    }
   }
 
   function formatDate(d: string) { const dt = new Date(d); return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}` }
@@ -134,12 +182,12 @@ export default function ConfiguracoesPage() {
         <TabsContent value="campos" className="mt-4 space-y-6">
           <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-base">Tags</CardTitle><CardDescription>Classifique clientes com tags personalizadas.</CardDescription></div><Button size="sm" onClick={() => openCrud('tag')}><Plus className="mr-2 h-4 w-4" /> Nova Tag</Button></CardHeader><CardContent>
             {tags.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">Nenhuma tag criada.</p> : (
-              <div className="flex flex-wrap gap-2">{tags.map((t) => (<Badge key={t.id} className="gap-1.5 cursor-pointer hover:opacity-80" style={{ backgroundColor: `${t.color}20`, color: t.color, borderColor: t.color }} onClick={() => openCrud('tag', { name: t.name, color: t.color })}><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: t.color }} />{t.name}</Badge>))}</div>
+              <div className="flex flex-wrap gap-2">{tags.map((t) => (<Badge key={t.id} className="gap-1.5 cursor-pointer hover:opacity-80" style={{ backgroundColor: `${t.color}20`, color: t.color, borderColor: t.color }} onClick={() => openCrud('tag', { id: t.id, name: t.name, color: t.color })}><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: t.color }} />{t.name}</Badge>))}</div>
             )}
           </CardContent></Card>
           <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-base">Tipos de Documento</CardTitle><CardDescription>Defina os tipos de documentos aceitos.</CardDescription></div><Button size="sm" onClick={() => openCrud('doctype')}><Plus className="mr-2 h-4 w-4" /> Novo Tipo</Button></CardHeader><CardContent>
             {docTypes.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">Nenhum tipo cadastrado.</p> : (
-              <Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Categoria</TableHead><TableHead>Formatos</TableHead><TableHead className="w-[80px]">Ações</TableHead></TableRow></TableHeader><TableBody>{docTypes.map((dt) => (<TableRow key={dt.id}><TableCell className="font-medium">{dt.name}</TableCell><TableCell className="text-muted-foreground">{dt.category || '—'}</TableCell><TableCell className="text-xs text-muted-foreground">{dt.allowedFormats}</TableCell><TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openCrud('doctype', { name: dt.name, color: '#3b82f6', category: dt.category || '' })}><Pencil className="h-3 w-3" /></Button><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"><Trash2 className="h-3 w-3" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
+              <Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Categoria</TableHead><TableHead>Formatos</TableHead><TableHead className="w-[80px]">Ações</TableHead></TableRow></TableHeader><TableBody>{docTypes.map((dt) => (<TableRow key={dt.id}><TableCell className="font-medium">{dt.name}</TableCell><TableCell className="text-muted-foreground">{dt.category || '—'}</TableCell><TableCell className="text-xs text-muted-foreground">{dt.allowedFormats}</TableCell><TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openCrud('doctype', { id: dt.id, name: dt.name, color: '#3b82f6', category: dt.category || '' })}><Pencil className="h-3 w-3" /></Button><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={async () => { if (!confirm(`Excluir "${dt.name}"?`)) return; const r = await fetch(`/api/document-types/${dt.id}`, { method: 'DELETE' }); if (r.ok) { toast.success('Excluído'); fetchOrg() } else toast.error('Erro ao excluir') }}><Trash2 className="h-3 w-3" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
             )}
           </CardContent></Card>
         </TabsContent>
@@ -202,7 +250,17 @@ export default function ConfiguracoesPage() {
           {crudType === 'tag' && <div className="grid gap-2"><Label>Cor</Label><div className="flex items-center gap-3"><Input type="color" value={crudForm.color} onChange={(e) => setCrudForm({ ...crudForm, color: e.target.value })} className="h-10 w-16 cursor-pointer" /><span className="text-sm">{crudForm.color}</span></div></div>}
           {crudType === 'doctype' && <div className="grid gap-2"><Label>Categoria</Label><Input value={crudForm.category} onChange={(e) => setCrudForm({ ...crudForm, category: e.target.value })} placeholder="Ex: Fiscal, Trabalhista" /></div>}
         </div>
-        <DialogFooter><Button variant="outline" onClick={() => setCrudOpen(false)}>Cancelar</Button><Button onClick={() => { setCrudOpen(false); toast.success('Salvo com sucesso!') }}>Salvar</Button></DialogFooter>
+        <DialogFooter>
+          {editingId && (
+            <Button variant="outline" className="mr-auto text-destructive hover:text-destructive" onClick={deleteCrud} disabled={crudSaving}>
+              <Trash2 className="mr-2 h-4 w-4" /> Excluir
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setCrudOpen(false)}>Cancelar</Button>
+          <Button onClick={saveCrud} disabled={crudSaving}>
+            {crudSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salvar
+          </Button>
+        </DialogFooter>
       </DialogContent></Dialog>
     </div>
   )
