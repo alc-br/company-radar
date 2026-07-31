@@ -87,7 +87,13 @@ export default function ConfiguracoesPage() {
   async function handleExport() {
     try {
       const res = await fetch('/api/exports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'audit', format: 'csv' }) })
-      if (res.ok) toast.success('Exportação iniciada.')
+      const data = await res.json()
+      if (!res.ok || !data.downloadUrl) { toast.error(data.error || 'Erro ao gerar exportação'); return }
+      const a = document.createElement('a')
+      a.href = data.downloadUrl
+      a.download = 'auditoria.csv'
+      a.click()
+      toast.success('Exportação gerada com sucesso.')
     } catch { toast.error('Erro ao exportar') }
   }
 

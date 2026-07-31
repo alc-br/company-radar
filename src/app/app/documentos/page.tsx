@@ -188,8 +188,14 @@ export default function DocumentosPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'documents', format: 'csv', filters: { clientId: filterClient, typeId: filterType, status: filterStatus } }),
       })
-      if (res.ok) toast.success('Exportação iniciada. Você será notificado quando estiver pronta.')
-    } catch { toast.error('Erro ao iniciar exportação') }
+      const data = await res.json()
+      if (!res.ok || !data.downloadUrl) { toast.error(data.error || 'Erro ao gerar exportação'); return }
+      const a = document.createElement('a')
+      a.href = data.downloadUrl
+      a.download = 'documentos.csv'
+      a.click()
+      toast.success('Exportação gerada com sucesso.')
+    } catch { toast.error('Erro ao gerar exportação') }
   }
 
   return (
