@@ -139,7 +139,7 @@ interface ClientData {
   tasks: Task[]
   documents: Document[]
   applications: TemplateApplication[]
-  _count: { tasks: number; documents: number; contacts: number }
+  count: { tasks: number; documents: number; contacts: number }
   overdueTasksCount: number
   activeApplicationsCount: number
   nextDueDate: string | null
@@ -201,7 +201,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   // Contacts state
   const [showContactDialog, setShowContactDialog] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
-  const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', role: '', notes: '' })
+  const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', role: '', notes: '', hasPortalAccess: false, password: '' })
   const [contactSaving, setContactSaving] = useState(false)
 
   // Comment state
@@ -251,28 +251,62 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   // ── Contact CRUD ─────────────────────────────────────────
   function openNewContact() {
     setEditingContact(null)
-    setContactForm({ name: '', email: '', phone: '', role: '', notes: '' })
+    setContactForm({ name: '', email: '', phone: '', role: '', notes: '', hasPortalAccess: false, password: '' })
     setShowContactDialog(true)
   }
 
   function openEditContact(c: Contact) {
     setEditingContact(c)
-    setContactForm({ name: c.name, email: c.email || '', phone: c.phone || '', role: c.role || '', notes: c.notes || '' })
+    setContactForm({
+      name: c.name, email: c.email || '', phone: c.phone || '', role: c.role || '',
+      notes: c.notes || '', hasPortalAccess: c.hasPortalAccess, password: '',
+    })
     setShowContactDialog(true)
   }
 
   async function saveContact() {
     if (!contactForm.name.trim()) return
+    if (contactForm.hasPortalAccess && !editingContact && !contactForm.password) {
+      toast.error('Defina uma senha para o acesso ao portal.')
+      return
+    }
+    if (contactForm.hasPortalAccess && contactForm.password && contactForm.password.length < 8) {
+      toast.error('A senha do portal deve ter no mínimo 8 caracteres.')
+      return
+    }
     setContactSaving(true)
     try {
-      if (editingContact) {
-        // Update contact via task API - contacts don't have their own API yet
-        // We'll use the PUT to client and add a contact update note
-        toast.info('Edição de contato via API dedicada em breve')
-      } else {
-        toast.info('Criação de contato via API dedicada em breve')
+      const body: Record<string, unknown> = {
+        name: contactForm.name.trim(),
+        email: contactForm.email.trim(),
+        phone: contactForm.phone.trim(),
+        role: contactForm.role.trim(),
+        notes: contactForm.notes.trim(),
+        hasPortalAccess: contactForm.hasPortalAccess,
       }
+      if (contactForm.password) body.password = contactForm.password
+
+      const res = editingContact
+        ? await fetch(`/api/client-contacts/${editingContact.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+        : await fetch(`/api/clients/${id}/contacts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'Erro ao salvar contato')
+        return
+      }
+
+      toast.success(editingContact ? 'Contato atualizado' : 'Contato criado')
       setShowContactDialog(false)
+      fetchClient()
     } catch {
       toast.error('Erro ao salvar contato')
     } finally {
@@ -281,7 +315,15 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   }
 
   async function deleteContact(contactId: string) {
-    toast.info('Exclusão de contato via API dedicada em breve')
+    if (!confirm('Excluir este contato?')) return
+    try {
+      const res = await fetch(`/api/client-contacts/${contactId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      toast.success('Contato excluído')
+      fetchClient()
+    } catch {
+      toast.error('Erro ao excluir contato')
+    }
   }
 
   // ── Comment ──────────────────────────────────────────────
@@ -414,7 +456,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <CheckCircle2 className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{client._count.tasks}</p>
+              <p className="text-2xl font-bold">{client.count.tasks}</p>
               <p className="text-xs text-muted-foreground">Tarefas</p>
             </div>
           </CardContent>
@@ -447,7 +489,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <FileText className="h-5 w-5 text-emerald-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{client._count.documents}</p>
+              <p className="text-2xl font-bold">{client.count.documents}</p>
               <p className="text-xs text-muted-foreground">Documentos</p>
             </div>
           </CardContent>
@@ -458,10 +500,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="resumo">Resumo</TabsTrigger>
-          <TabsTrigger value="tarefas">Tarefas ({client._count.tasks})</TabsTrigger>
+          <TabsTrigger value="tarefas">Tarefas ({client.count.tasks})</TabsTrigger>
           <TabsTrigger value="templates">Templates ({activeApplications.length})</TabsTrigger>
-          <TabsTrigger value="documentos">Documentos ({client._count.documents})</TabsTrigger>
-          <TabsTrigger value="contatos">Contatos ({client._count.contacts})</TabsTrigger>
+          <TabsTrigger value="documentos">Documentos ({client.count.documents})</TabsTrigger>
+          <TabsTrigger value="contatos">Contatos ({client.count.contacts})</TabsTrigger>
           <TabsTrigger value="comentarios">Comentários</TabsTrigger>
           <TabsTrigger value="portal">Portal</TabsTrigger>
         </TabsList>
@@ -886,6 +928,31 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 rows={3}
               />
             </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Acesso ao portal</Label>
+                <p className="text-xs text-muted-foreground">Permite que esse contato entre no portal do cliente.</p>
+              </div>
+              <Switch
+                checked={contactForm.hasPortalAccess}
+                onCheckedChange={checked => setContactForm(p => ({ ...p, hasPortalAccess: checked }))}
+              />
+            </div>
+            {contactForm.hasPortalAccess && (
+              <div className="space-y-2">
+                <Label>{editingContact ? 'Nova senha (opcional)' : 'Senha do portal'}</Label>
+                <Input
+                  type="password"
+                  placeholder="Mínimo 8 caracteres"
+                  value={contactForm.password}
+                  onChange={e => setContactForm(p => ({ ...p, password: e.target.value }))}
+                />
+                {editingContact && (
+                  <p className="text-xs text-muted-foreground">Deixe em branco para manter a senha atual.</p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowContactDialog(false)}>Cancelar</Button>

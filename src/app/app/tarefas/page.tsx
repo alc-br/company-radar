@@ -104,7 +104,7 @@ interface TaskRow {
   checklist: Array<{ id: string; text: string; done: boolean; required: boolean; order: number }>
   dependencies: Array<{ dependsOnId: string; blockingType: string; dependsOnTask: { id: string; title: string; status: string } }>
   client: { id: string; name: string; tradeName: string | null }
-  _count: { subtasks: number; checklist: number; comments: number; followers: number }
+  count: { subtasks: number; checklist: number; comments: number; followers: number }
   createdAt: string
   updatedAt: string
 }

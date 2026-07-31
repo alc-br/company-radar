@@ -83,7 +83,7 @@ interface ClientRow {
   segment: string | null
   tagsList: Array<{ id: string; name: string; color: string }>
   pendingTasks: number
-  _count: { tasks: number; documents: number }
+  count: { tasks: number; documents: number }
   applications: Array<{ id: string; status: string }>
   createdAt: string
   updatedAt: string

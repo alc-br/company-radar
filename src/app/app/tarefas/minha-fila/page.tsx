@@ -41,7 +41,7 @@ interface TaskItem {
   assignedTo: string | null
   client: { id: string; name: string; tradeName: string | null }
   checklist: Array<{ id: string; text: string; done: boolean; required: boolean; order: number }>
-  _count: { subtasks: number; checklist: number; comments: number; followers: number }
+  count: { subtasks: number; checklist: number; comments: number; followers: number }
 }
 
 // ── Helpers ────────────────────────────────────────────────
@@ -389,10 +389,10 @@ export default function MinhaFilaPage() {
                               : formatDate(task.dueDate)}
                       </span>
                     )}
-                    {task._count.comments > 0 && (
+                    {task.count.comments > 0 && (
                       <span className="flex items-center gap-1">
                         <MessageSquare className="h-3 w-3" />
-                        {task._count.comments}
+                        {task.count.comments}
                       </span>
                     )}
                   </div>

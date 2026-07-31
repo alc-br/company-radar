@@ -152,7 +152,7 @@ interface TaskDetail {
   dependsOn: TaskDep[]
   subtasks: Array<{ id: string; title: string; status: string }>
   parentTask: { id: string; title: string } | null
-  _count: { subtasks: number; checklist: number; comments: number; followers: number }
+  count: { subtasks: number; checklist: number; comments: number; followers: number }
 }
 
 // ── Helpers ────────────────────────────────────────────────
@@ -666,9 +666,9 @@ export default function TaskDetailPage() {
               </TabsTrigger>
               <TabsTrigger value="comentarios" className="text-xs gap-1.5">
                 <MessageSquare className="h-3.5 w-3.5" /> Comentários
-                {task._count.comments > 0 && (
+                {task.count.comments > 0 && (
                   <Badge variant="secondary" className="ml-1 text-[10px] h-4 px-1 rounded-full">
-                    {task._count.comments}
+                    {task.count.comments}
                   </Badge>
                 )}
               </TabsTrigger>
@@ -1095,15 +1095,15 @@ export default function TaskDetailPage() {
             <CardContent className="p-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="text-center">
-                  <p className="text-lg font-bold">{task._count.checklist}</p>
+                  <p className="text-lg font-bold">{task.count.checklist}</p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Checklist</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold">{task._count.comments}</p>
+                  <p className="text-lg font-bold">{task.count.comments}</p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Comentários</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold">{task._count.followers}</p>
+                  <p className="text-lg font-bold">{task.count.followers}</p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Seguidores</p>
                 </div>
                 <div className="text-center">

@@ -55,7 +55,7 @@ interface TemplateData {
   responsibleName: string | null; instructions: string | null; warning: string | null
   defaultPeriodicity: string | null; variables: string
   stages: Stage[]; applications: Application[];
-  _count: { versions: number; applications: number }
+  count: { versions: number; applications: number }
   createdAt: string; updatedAt: string
 }
 

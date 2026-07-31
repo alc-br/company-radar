@@ -72,7 +72,7 @@ interface TemplateRow {
   responsibleName: string | null
   stagesCount: number
   tasksCount: number
-  _count: { versions: number; applications: number }
+  count: { versions: number; applications: number }
   department: { id: string; name: string } | null
   createdAt: string
   updatedAt: string
@@ -522,7 +522,7 @@ export default function TemplatesPage() {
                       <FileText className="h-3 w-3" /> v{t.currentVersion || 0}
                     </span>
                     <span className="flex items-center gap-1" title="Usos">
-                      <Users className="h-3 w-3" /> {t._count.applications}
+                      <Users className="h-3 w-3" /> {t.count.applications}
                     </span>
                     {t.stagesCount > 0 && (
                       <span className="flex items-center gap-1" title="Etapas">
@@ -593,7 +593,7 @@ export default function TemplatesPage() {
                       v{t.currentVersion || 0}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-sm">
-                      {t._count.applications}
+                      {t.count.applications}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-sm">
                       {t.responsibleName || '—'}
