@@ -154,9 +154,46 @@ function StepOrgData({
     fuso: 'America/Sao_Paulo',
     corPrincipal: '#2563eb',
   })
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
 
   function updateField(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  async function uploadLogo(file: File) {
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      toast.error('Envie um arquivo PNG ou JPG.')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Arquivo maior que 2MB.')
+      return
+    }
+    setUploadingLogo(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/settings/logo', { method: 'POST', body: fd })
+      if (res.ok) {
+        const data = await res.json()
+        setLogoUrl(data.logo)
+        toast.success('Logotipo enviado!')
+      } else {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.error || 'Erro ao enviar logotipo')
+      }
+    } catch {
+      toast.error('Erro ao enviar logotipo')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  function handleLogoDrop(e: React.DragEvent) {
+    e.preventDefault()
+    const f = e.dataTransfer.files[0]
+    if (f) uploadLogo(f)
   }
 
   function handleNext() {
@@ -308,16 +345,35 @@ function StepOrgData({
 
             <div className="sm:col-span-2">
               <Label>Logotipo</Label>
-              <div className="mt-1.5 flex items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/30 p-8 transition-colors hover:border-muted-foreground/50">
-                <div className="text-center">
-                  <ImageIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Envio de logotipo em breve — configure depois em Configurações
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground/70">
-                    PNG, JPG até 2MB
-                  </p>
-                </div>
+              <div
+                onDrop={handleLogoDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className="mt-1.5 flex items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/30 p-8 transition-colors hover:border-muted-foreground/50"
+              >
+                {logoUrl ? (
+                  <div className="flex flex-col items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={logoUrl} alt="Logotipo" className="h-16 w-16 rounded-lg object-cover border" />
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer text-xs text-primary hover:underline">
+                        <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }} />
+                        Trocar
+                      </label>
+                      <button type="button" onClick={() => setLogoUrl(null)} className="text-xs text-muted-foreground hover:text-destructive">Remover</button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer text-center">
+                    <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }} />
+                    {uploadingLogo ? <Loader2 className="mx-auto h-10 w-10 text-muted-foreground/50 animate-spin" /> : <ImageIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />}
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {uploadingLogo ? 'Enviando...' : 'Arraste ou clique para enviar o logotipo'}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground/70">
+                      PNG, JPG até 2MB
+                    </p>
+                  </label>
+                )}
               </div>
             </div>
           </div>

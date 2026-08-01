@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Settings, Save, Building2, Plus, Pencil, Trash2, X,
-  Shield, History, Loader2, Search, Download, Globe, Palette, Lock,
+  Shield, History, Loader2, Search, Download, Globe, Palette, Lock, ImageIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,6 +52,7 @@ export default function ConfiguracoesPage() {
   const [alerts, setAlerts] = useState<Record<string, boolean>>({ alert30: true, alert15: true, alert7: true, alert3: false, alert1: false, alert0: false })
   const [tags, setTags] = useState<Array<{ id: string; name: string; color: string }>>([])
   const [docTypes, setDocTypes] = useState<Array<{ id: string; name: string; category: string | null; allowedFormats: string }>>([])
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [passwordMinLength, setPasswordMinLength] = useState(8)
   const [auditRetentionDays, setAuditRetentionDays] = useState('365')
   const [sessions, setSessions] = useState<Array<{ id: string; expiresAt: string }>>([])
@@ -97,6 +98,29 @@ export default function ConfiguracoesPage() {
       const msg = res.ok ? 'Configurações salvas!' : 'Erro ao salvar'
       if (res.ok) toast.success(msg); else toast.error(msg)
     } catch (_e) { toast.error('Erro ao salvar') } finally { setSaving(false) }
+  }
+
+  async function uploadLogo(file: File) {
+    if (!['image/png', 'image/jpeg'].includes(file.type)) { toast.error('Envie um arquivo PNG ou JPG.'); return }
+    if (file.size > 2 * 1024 * 1024) { toast.error('Arquivo maior que 2MB.'); return }
+    setUploadingLogo(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/settings/logo', { method: 'POST', body: fd })
+      if (res.ok) {
+        const data = await res.json()
+        setOrg((prev) => ({ ...prev, logo: data.logo }))
+        toast.success('Logotipo atualizado!')
+      } else {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.error || 'Erro ao enviar logotipo')
+      }
+    } catch {
+      toast.error('Erro ao enviar logotipo')
+    } finally {
+      setUploadingLogo(false)
+    }
   }
 
   async function handlePrivacyRequest(action: 'data_export_requested' | 'lgpd_request') {
@@ -199,6 +223,24 @@ export default function ConfiguracoesPage() {
               <div className="grid gap-2"><Label>Fuso Horário</Label><Select value={org.timezone} onValueChange={(v) => setOrg({ ...org, timezone: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TIMEZONES.map((tz) => (<SelectItem key={tz} value={tz}>{tz.replace('America/', '').replace(/_/g, ' ')}</SelectItem>))}</SelectContent></Select></div>
             </div>
             <div className="grid gap-2"><Label className="flex items-center gap-2"><Palette className="h-4 w-4" /> Cor Primária</Label><div className="flex items-center gap-3"><Input type="color" value={org.primaryColor} onChange={(e) => setOrg({ ...org, primaryColor: e.target.value })} className="h-10 w-16 cursor-pointer" /><span className="text-sm text-muted-foreground">{org.primaryColor}</span></div></div>
+            <div className="grid gap-2">
+              <Label>Logotipo</Label>
+              <div className="flex items-center gap-4">
+                {org.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={org.logo} alt="Logotipo" className="h-14 w-14 rounded-lg object-cover border" />
+                ) : (
+                  <div className="h-14 w-14 rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/30 flex items-center justify-center"><ImageIcon className="h-5 w-5 text-muted-foreground/50" /></div>
+                )}
+                <label className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm cursor-pointer hover:bg-muted/50">
+                  <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }} />
+                  {uploadingLogo && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {org.logo ? 'Trocar logotipo' : 'Enviar logotipo'}
+                </label>
+                {org.logo && <button type="button" onClick={() => setOrg({ ...org, logo: null })} className="text-xs text-muted-foreground hover:text-destructive">Remover</button>}
+              </div>
+              <p className="text-xs text-muted-foreground">PNG ou JPG até 2MB</p>
+            </div>
             <Button onClick={saveOrg} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}<Save className="mr-2 h-4 w-4" /> Salvar</Button>
           </CardContent></Card>
         </TabsContent>
