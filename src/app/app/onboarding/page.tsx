@@ -15,12 +15,12 @@ import {
   Upload,
   Plus,
   X,
-  Palette,
   Phone,
   Mail,
   MapPin,
   Clock,
   ImageIcon,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -137,9 +137,11 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
 function StepOrgData({
   onNext,
   onBack,
+  saving,
 }: {
   onNext: (data: Record<string, string>) => void
   onBack: () => void
+  saving: boolean
 }) {
   const [form, setForm] = useState({
     razaoSocial: '',
@@ -155,6 +157,14 @@ function StepOrgData({
 
   function updateField(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function handleNext() {
+    if (!form.razaoSocial.trim()) {
+      toast.error('Informe a razão social.')
+      return
+    }
+    onNext(form)
   }
 
   return (
@@ -302,7 +312,7 @@ function StepOrgData({
                 <div className="text-center">
                   <ImageIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Arraste ou clique para enviar o logotipo
+                    Envio de logotipo em breve — configure depois em Configurações
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground/70">
                     PNG, JPG até 2MB
@@ -315,11 +325,12 @@ function StepOrgData({
       </Card>
 
       <div className="mt-6 flex justify-between">
-        <Button variant="outline" onClick={onBack} className="gap-2">
+        <Button variant="outline" onClick={onBack} className="gap-2" disabled={saving}>
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Button>
-        <Button onClick={() => onNext(form)} className="gap-2">
+        <Button onClick={handleNext} className="gap-2" disabled={saving}>
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
           Próximo
           <ArrowRight className="h-4 w-4" />
         </Button>
@@ -331,9 +342,11 @@ function StepOrgData({
 function StepStructure({
   onNext,
   onBack,
+  saving,
 }: {
   onNext: (departments: Array<{ name: string; color: string; description: string }>) => void
   onBack: () => void
+  saving: boolean
 }) {
   const [selected, setSelected] = useState<Set<string>>(
     new Set(SUGGESTED_DEPARTMENTS.map((d) => d.name))
@@ -473,11 +486,12 @@ function StepStructure({
       </Card>
 
       <div className="mt-6 flex justify-between">
-        <Button variant="outline" onClick={onBack} className="gap-2">
+        <Button variant="outline" onClick={onBack} className="gap-2" disabled={saving}>
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Button>
-        <Button onClick={handleNext} className="gap-2">
+        <Button onClick={handleNext} className="gap-2" disabled={saving}>
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
           Próximo
           <ArrowRight className="h-4 w-4" />
         </Button>
@@ -486,17 +500,79 @@ function StepStructure({
   )
 }
 
-function StepImportClients({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+type ParsedClientRow = { name: string; cnpj: string; email: string; phone: string; city: string; state: string }
+
+function parseClientsCsv(text: string): ParsedClientRow[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  if (lines.length < 2) return []
+  const header = lines[0].split(',').map((h) => h.trim().toLowerCase())
+  const col = (names: string[]) => names.map((n) => header.indexOf(n)).find((i) => i >= 0) ?? -1
+  const idx = {
+    name: col(['razao_social', 'nome', 'name']),
+    cnpj: col(['cnpj']),
+    email: col(['email', 'e-mail']),
+    phone: col(['telefone', 'phone']),
+    city: col(['cidade', 'city']),
+    state: col(['estado', 'uf', 'state']),
+  }
+  if (idx.name < 0) return []
+  const rows: ParsedClientRow[] = []
+  for (const line of lines.slice(1)) {
+    const cells = line.split(',').map((c) => c.trim())
+    const name = cells[idx.name] || ''
+    if (!name) continue
+    rows.push({
+      name,
+      cnpj: idx.cnpj >= 0 ? cells[idx.cnpj] || '' : '',
+      email: idx.email >= 0 ? cells[idx.email] || '' : '',
+      phone: idx.phone >= 0 ? cells[idx.phone] || '' : '',
+      city: idx.city >= 0 ? cells[idx.city] || '' : '',
+      state: idx.state >= 0 ? cells[idx.state] || '' : '',
+    })
+  }
+  return rows
+}
+
+function StepImportClients({
+  onNext,
+  onBack,
+  onImport,
+  importing,
+  importedCount,
+}: {
+  onNext: () => void
+  onBack: () => void
+  onImport: (rows: ParsedClientRow[]) => Promise<void>
+  importing: boolean
+  importedCount: number
+}) {
   const [file, setFile] = useState<File | null>(null)
+  const [parsedCount, setParsedCount] = useState<number | null>(null)
+
+  async function handleFile(f: File) {
+    if (!f.name.endsWith('.csv')) {
+      toast.error('Envie um arquivo CSV. Suporte a XLSX ainda não está disponível.')
+      return
+    }
+    setFile(f)
+    const text = await f.text()
+    const rows = parseClientsCsv(text)
+    setParsedCount(rows.length)
+    if (rows.length === 0) toast.error('Não encontramos linhas válidas no CSV. Confira o cabeçalho.')
+  }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     const f = e.dataTransfer.files[0]
-    if (f && (f.name.endsWith('.csv') || f.name.endsWith('.xlsx'))) {
-      setFile(f)
-    } else {
-      toast.error('Envie um arquivo CSV ou XLSX')
-    }
+    if (f) handleFile(f)
+  }
+
+  async function handleImportClick() {
+    if (!file) return
+    const text = await file.text()
+    const rows = parseClientsCsv(text)
+    if (rows.length === 0) { toast.error('Nenhuma linha válida para importar.'); return }
+    await onImport(rows)
   }
 
   return (
@@ -518,16 +594,16 @@ function StepImportClients({ onNext, onBack }: { onNext: () => void; onBack: () 
             <Upload className="h-12 w-12 text-muted-foreground/50 mb-4" />
             <p className="font-medium text-sm">Arraste seu arquivo aqui</p>
             <p className="text-xs text-muted-foreground mt-1 mb-4">
-              Formatos aceitos: CSV, XLSX
+              Formato aceito: CSV
             </p>
             <label className="cursor-pointer">
               <input
                 type="file"
-                accept=".csv,.xlsx"
+                accept=".csv"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0]
-                  if (f) setFile(f)
+                  if (f) handleFile(f)
                 }}
               />
               <span className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
@@ -544,21 +620,34 @@ function StepImportClients({ onNext, onBack }: { onNext: () => void; onBack: () 
                 <p className="text-sm font-medium truncate">{file.name}</p>
                 <p className="text-xs text-muted-foreground">
                   {(file.size / 1024).toFixed(1)} KB
+                  {parsedCount !== null && ` · ${parsedCount} cliente(s) identificado(s)`}
                 </p>
               </div>
               <button
-                onClick={() => setFile(null)}
+                onClick={() => { setFile(null); setParsedCount(null) }}
                 className="text-muted-foreground hover:text-destructive"
                 aria-label="Remover arquivo"
               >
                 <X className="h-4 w-4" />
               </button>
+              {parsedCount !== null && parsedCount > 0 && importedCount === 0 && (
+                <Button size="sm" onClick={handleImportClick} disabled={importing}>
+                  {importing && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                  Importar {parsedCount}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {importedCount > 0 && (
+            <div className="mt-4 flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+              <CheckCircle2 className="h-4 w-4" /> {importedCount} cliente(s) importado(s) com sucesso.
             </div>
           )}
 
           <div className="mt-6 rounded-lg bg-muted/30 p-4">
             <p className="text-xs font-medium text-muted-foreground mb-2">
-              Formato esperado do CSV:
+              Formato esperado do CSV (cabeçalho na primeira linha):
             </p>
             <code className="text-xs text-muted-foreground bg-background rounded px-2 py-1">
               razao_social, cnpj, email, telefone, cidade, estado
@@ -568,15 +657,15 @@ function StepImportClients({ onNext, onBack }: { onNext: () => void; onBack: () 
       </Card>
 
       <div className="mt-6 flex justify-between">
-        <Button variant="outline" onClick={onBack} className="gap-2">
+        <Button variant="outline" onClick={onBack} className="gap-2" disabled={importing}>
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Button>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={onNext}>
+          <Button variant="ghost" onClick={onNext} disabled={importing}>
             Pular esta etapa
           </Button>
-          <Button onClick={onNext} className="gap-2">
+          <Button onClick={onNext} className="gap-2" disabled={importing}>
             Próximo
             <ArrowRight className="h-4 w-4" />
           </Button>
@@ -589,9 +678,11 @@ function StepImportClients({ onNext, onBack }: { onNext: () => void; onBack: () 
 function StepTemplate({
   onNext,
   onBack,
+  saving,
 }: {
   onNext: (templateId: string | null) => void
   onBack: () => void
+  saving: boolean
 }) {
   const [selected, setSelected] = useState<string | null>(null)
 
@@ -600,7 +691,7 @@ function StepTemplate({
       <div className="mb-8">
         <h2 className="text-2xl font-bold">Primeiro Template</h2>
         <p className="text-muted-foreground mt-1">
-          Escolha um modelo de trabalho para começar ou crie um em branco depois.
+          Escolha um modelo de trabalho para começar (criado vazio, pronto para você montar as etapas) ou crie um em branco depois.
         </p>
       </div>
 
@@ -640,21 +731,22 @@ function StepTemplate({
             Criar em branco
           </p>
           <p className="text-xs text-muted-foreground/70 mt-0.5">
-            Começar do zero
+            Começar do zero em Templates
           </p>
         </button>
       </div>
 
       <div className="mt-6 flex justify-between">
-        <Button variant="outline" onClick={onBack} className="gap-2">
+        <Button variant="outline" onClick={onBack} className="gap-2" disabled={saving}>
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Button>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => onNext(null)}>
+          <Button variant="ghost" onClick={() => onNext(null)} disabled={saving}>
             Pular esta etapa
           </Button>
-          <Button onClick={() => onNext(selected)} className="gap-2">
+          <Button onClick={() => onNext(selected)} className="gap-2" disabled={saving}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Próximo
             <ArrowRight className="h-4 w-4" />
           </Button>
@@ -668,32 +760,29 @@ function StepCompletion({
   onNext,
   onBack,
   completedSteps,
+  saving,
 }: {
-  onNext: () => void
+  onNext: (extra: { teamInvited: boolean; alertsConfigured: boolean }) => void
   onBack: () => void
   completedSteps: {
     orgConfigured: boolean
     clientRegistered: boolean
     templateApplied: boolean
-    teamInvited: boolean
-    alertsConfigured: boolean
   }
+  saving: boolean
 }) {
-  const [checks, setChecks] = useState(completedSteps)
+  const [teamInvited, setTeamInvited] = useState(false)
+  const [alertsConfigured, setAlertsConfigured] = useState(false)
 
   const items = [
-    { key: 'orgConfigured' as const, label: 'Organização configurada', desc: 'Dados básicos preenchidos' },
-    { key: 'clientRegistered' as const, label: 'Cliente cadastrado', desc: 'Primeiro cliente adicionado' },
-    { key: 'templateApplied' as const, label: 'Template aplicado', desc: 'Modelo de trabalho selecionado' },
-    { key: 'teamInvited' as const, label: 'Equipe convidada', desc: 'Colaboradores adicionados' },
-    { key: 'alertsConfigured' as const, label: 'Alertas configurados', desc: 'Notificações ativas' },
+    { key: 'orgConfigured' as const, label: 'Organização configurada', desc: 'Dados básicos preenchidos', checked: completedSteps.orgConfigured, editable: false },
+    { key: 'clientRegistered' as const, label: 'Cliente cadastrado', desc: 'Primeiro cliente adicionado', checked: completedSteps.clientRegistered, editable: false },
+    { key: 'templateApplied' as const, label: 'Template aplicado', desc: 'Modelo de trabalho selecionado', checked: completedSteps.templateApplied, editable: false },
+    { key: 'teamInvited' as const, label: 'Equipe convidada', desc: 'Convide colaboradores em Equipe quando quiser', checked: teamInvited, editable: true, onToggle: () => setTeamInvited((v) => !v) },
+    { key: 'alertsConfigured' as const, label: 'Alertas configurados', desc: 'Ajuste em Configurações > Alertas quando quiser', checked: alertsConfigured, editable: true, onToggle: () => setAlertsConfigured((v) => !v) },
   ]
 
-  function toggle(key: keyof typeof checks) {
-    setChecks((prev) => ({ ...prev, [key]: !prev[key] }))
-  }
-
-  const doneCount = Object.values(checks).filter(Boolean).length
+  const doneCount = items.filter((i) => i.checked).length
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -703,7 +792,7 @@ function StepCompletion({
         </div>
         <h2 className="text-2xl font-bold">Quase lá!</h2>
         <p className="text-muted-foreground mt-1">
-          Verifique os itens abaixo. Você pode marcar o que já fez.
+          Este é o seu progresso real nesta configuração. Os dois últimos itens você pode fazer a qualquer momento.
         </p>
       </div>
 
@@ -713,18 +802,19 @@ function StepCompletion({
             {items.map((item) => (
               <label
                 key={item.key}
-                className="flex items-start gap-3 rounded-lg border border-border p-4 cursor-pointer hover:bg-muted/30 transition-colors"
+                className={`flex items-start gap-3 rounded-lg border border-border p-4 transition-colors ${item.editable ? 'cursor-pointer hover:bg-muted/30' : 'opacity-90'}`}
               >
                 <Checkbox
-                  checked={checks[item.key]}
-                  onCheckedChange={() => toggle(item.key)}
+                  checked={item.checked}
+                  disabled={!item.editable}
+                  onCheckedChange={item.editable ? item.onToggle : undefined}
                   className="mt-0.5"
                 />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm">{item.label}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
                 </div>
-                {checks[item.key] && (
+                {item.checked && (
                   <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
                 )}
               </label>
@@ -745,11 +835,12 @@ function StepCompletion({
       </Card>
 
       <div className="mt-6 flex justify-between">
-        <Button variant="outline" onClick={onBack} className="gap-2">
+        <Button variant="outline" onClick={onBack} className="gap-2" disabled={saving}>
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Button>
-        <Button onClick={onNext} className="gap-2">
+        <Button onClick={() => onNext({ teamInvited, alertsConfigured })} className="gap-2" disabled={saving}>
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
           <Rocket className="h-4 w-4" />
           Concluir configuração
         </Button>
@@ -762,51 +853,72 @@ function StepCompletion({
 export default function OnboardingPage() {
   const router = useRouter()
   const [session, setSession] = useState<Session | null>(null)
+  const [orgId, setOrgId] = useState<string>('')
   const [step, setStep] = useState(1)
   const [saving, setSaving] = useState(false)
-  const [orgData, setOrgData] = useState<Record<string, string>>({})
+  const [importing, setImporting] = useState(false)
+  const [orgConfigured, setOrgConfigured] = useState(false)
+  const [importedCount, setImportedCount] = useState(0)
+  const [templateApplied, setTemplateApplied] = useState(false)
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem('cr_session')
-      if (raw) setSession(JSON.parse(raw))
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        setSession(parsed)
+        setOrgId(parsed.orgId || '')
+      }
     } catch {
       // ignore
     }
   }, [])
 
+  function persistOrgId(id: string) {
+    setOrgId(id)
+    try {
+      const raw = localStorage.getItem('cr_session')
+      const parsed = raw ? JSON.parse(raw) : {}
+      localStorage.setItem('cr_session', JSON.stringify({ ...parsed, orgId: id }))
+    } catch {
+      // ignore
+    }
+  }
+
+  async function ensureOrg(fallbackName: string): Promise<string | null> {
+    if (orgId) return orgId
+    const res = await fetch('/api/organizations/create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: fallbackName || 'Minha Organização' }),
+    })
+    if (!res.ok) return null
+    const created = await res.json()
+    persistOrgId(String(created.id))
+    return String(created.id)
+  }
+
   async function saveOrgData(data: Record<string, string>) {
-    if (!session?.orgId) return
     setSaving(true)
     try {
-      const settings: Record<string, string> = {}
-      if (data.razaoSocial) settings.razaoSocial = data.razaoSocial
-      if (data.nomeFantasia) settings.nomeFantasia = data.nomeFantasia
-      if (data.cnpj) settings.cnpj = data.cnpj
-      if (data.crc) settings.crc = data.crc
-      if (data.telefone) settings.telefone = data.telefone
-      if (data.email) settings.email = data.email
-      if (data.endereco) settings.endereco = data.endereco
-      if (data.fuso) settings.timezone = data.fuso
-      if (data.corPrincipal) settings.primaryColor = data.corPrincipal
+      const activeOrgId = await ensureOrg(data.razaoSocial)
+      if (!activeOrgId) { toast.error('Erro ao criar organização'); return }
 
-      await fetch('/api/organizations', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch('/api/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: data.razaoSocial || undefined,
-          tradeName: data.nomeFantasia || undefined,
-          cnpj: data.cnpj || undefined,
-          email: data.email || undefined,
-          phone: data.telefone || undefined,
-          address: data.endereco || undefined,
-          timezone: data.fuso || undefined,
-          primaryColor: data.corPrincipal || undefined,
-          onboardingStep: 2,
-          settings: JSON.stringify(settings),
+          name: data.razaoSocial,
+          tradeName: data.nomeFantasia,
+          cnpj: data.cnpj,
+          email: data.email,
+          phone: data.telefone,
+          address: data.endereco,
+          timezone: data.fuso,
+          primaryColor: data.corPrincipal,
+          settings: { crc: data.crc },
         }),
       })
-      setOrgData(data)
+      if (!res.ok) { toast.error('Erro ao salvar dados da organização'); return }
+      setOrgConfigured(true)
       setStep(3)
     } catch {
       toast.error('Erro ao salvar dados')
@@ -818,16 +930,20 @@ export default function OnboardingPage() {
   async function saveDepartments(
     departments: Array<{ name: string; color: string; description: string }>
   ) {
-    if (!session?.orgId) return
+    if (departments.length === 0) { setStep(4); return }
     setSaving(true)
     try {
-      await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ onboardingStep: 3 }),
-      })
-      // Departments would be created via an API call here
-      toast.success(`${departments.length} departamento(s) configurado(s)`)
+      const results = await Promise.all(
+        departments.map((d) =>
+          fetch('/api/departments', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: d.name, color: d.color, description: d.description }),
+          }).then((r) => r.ok)
+        )
+      )
+      const created = results.filter(Boolean).length
+      if (created > 0) toast.success(`${created} departamento(s) criado(s)`)
+      if (created < departments.length) toast.error(`${departments.length - created} departamento(s) não puderam ser criados`)
       setStep(4)
     } catch {
       toast.error('Erro ao salvar departamentos')
@@ -836,18 +952,57 @@ export default function OnboardingPage() {
     }
   }
 
-  async function finishOnboarding() {
-    if (!session?.orgId) return
+  async function importClients(rows: ParsedClientRow[]) {
+    setImporting(true)
+    try {
+      const results = await Promise.all(
+        rows.map((row) =>
+          fetch('/api/clients', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: row.name, cnpj: row.cnpj, email: row.email, phone: row.phone, city: row.city, state: row.state }),
+          }).then((r) => r.ok)
+        )
+      )
+      const created = results.filter(Boolean).length
+      setImportedCount(created)
+      if (created > 0) toast.success(`${created} cliente(s) importado(s)`)
+      if (created < rows.length) toast.error(`${rows.length - created} linha(s) não puderam ser importadas`)
+    } catch {
+      toast.error('Erro ao importar clientes')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function applyTemplate(templateId: string | null) {
+    if (!templateId || templateId === '__blank__') { setStep(6); return }
     setSaving(true)
     try {
-      await fetch('/api/organizations', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          onboardingCompleted: true,
-          onboardingStep: 6,
-        }),
+      const example = TEMPLATE_EXAMPLES.find((t) => t.id === templateId)
+      if (!example) { setStep(6); return }
+      const res = await fetch('/api/templates', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: example.name, description: example.description, category: example.category, stages: [] }),
       })
+      if (res.ok) { setTemplateApplied(true); toast.success('Template criado — edite as etapas em Templates.') }
+      else toast.error('Erro ao criar template')
+      setStep(6)
+    } catch {
+      toast.error('Erro ao criar template')
+      setStep(6)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function finishOnboarding(extra: { teamInvited: boolean; alertsConfigured: boolean }) {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onboardingCompleted: true, settings: { onboarding: extra } }),
+      })
+      if (!res.ok) { toast.error('Erro ao concluir. Tente novamente.'); return }
       toast.success('Configuração concluída com sucesso!')
       router.replace('/app')
     } catch {
@@ -889,15 +1044,6 @@ export default function OnboardingPage() {
 
       {/* Step Content */}
       <div className="px-4 py-8">
-        {saving && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-            <div className="flex flex-col items-center gap-3 rounded-xl bg-white p-8 shadow-xl">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#2563eb] border-t-transparent" />
-              <p className="text-sm font-medium">Salvando...</p>
-            </div>
-          </div>
-        )}
-
         {step === 1 && (
           <StepWelcome onNext={() => setStep(2)} />
         )}
@@ -905,41 +1051,41 @@ export default function OnboardingPage() {
           <StepOrgData
             onNext={saveOrgData}
             onBack={() => setStep(1)}
+            saving={saving}
           />
         )}
         {step === 3 && (
           <StepStructure
             onNext={saveDepartments}
             onBack={() => setStep(2)}
+            saving={saving}
           />
         )}
         {step === 4 && (
           <StepImportClients
             onNext={() => setStep(5)}
             onBack={() => setStep(3)}
+            onImport={importClients}
+            importing={importing}
+            importedCount={importedCount}
           />
         )}
         {step === 5 && (
           <StepTemplate
-            onNext={(templateId) => {
-              if (templateId) {
-                toast.success('Template selecionado!')
-              }
-              setStep(6)
-            }}
+            onNext={applyTemplate}
             onBack={() => setStep(4)}
+            saving={saving}
           />
         )}
         {step === 6 && (
           <StepCompletion
             onNext={finishOnboarding}
             onBack={() => setStep(5)}
+            saving={saving}
             completedSteps={{
-              orgConfigured: !!orgData.razaoSocial,
-              clientRegistered: false,
-              templateApplied: false,
-              teamInvited: false,
-              alertsConfigured: false,
+              orgConfigured,
+              clientRegistered: importedCount > 0,
+              templateApplied,
             }}
           />
         )}

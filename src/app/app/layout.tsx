@@ -271,6 +271,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((org) => { if (org) setOrgName(org.name || 'Minha Organização') })
       .catch(() => setOrgName('Minha Organização'))
+    if (pathname !== '/app/onboarding') {
+      fetch('/api/settings')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d && d.onboardingCompleted === false) router.replace('/app/onboarding') })
+        .catch(() => {})
+    }
     fetch('/api/notifications')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data) setUnreadNotif(data.unread || 0) })
