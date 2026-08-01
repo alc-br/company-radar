@@ -24,10 +24,13 @@ import { toast } from 'sonner'
 type OrgSettings = { name: string; tradeName: string; cnpj: string; email: string; phone: string; logo: string | null; timezone: string; primaryColor: string; settings: Record<string, unknown> }
 type AuditLog = { id: string; userName: string | null; action: string; entity: string | null; entityId: string | null; detail: string | null; ip: string | null; createdAt: string }
 
+// Chaves sem underscore antes do numero: "alert_30" sofreria camelCase no
+// round-trip do backend (djangorestframework-camel-case) e viraria "alert30"
+// na resposta, perdendo o valor salvo no proximo carregamento.
 const DEFAULT_ALERTS = [
-  { key: 'alert_30', label: '30 dias antes', value: 30 }, { key: 'alert_15', label: '15 dias antes', value: 15 },
-  { key: 'alert_7', label: '7 dias antes', value: 7 }, { key: 'alert_3', label: '3 dias antes', value: 3 },
-  { key: 'alert_1', label: '1 dia antes', value: 1 }, { key: 'alert_0', label: 'No dia', value: 0 },
+  { key: 'alert30', label: '30 dias antes', value: 30 }, { key: 'alert15', label: '15 dias antes', value: 15 },
+  { key: 'alert7', label: '7 dias antes', value: 7 }, { key: 'alert3', label: '3 dias antes', value: 3 },
+  { key: 'alert1', label: '1 dia antes', value: 1 }, { key: 'alert0', label: 'No dia', value: 0 },
 ]
 
 const TIMEZONES = ['America/Sao_Paulo', 'America/Manaus', 'America/Belem', 'America/Fortaleza', 'America/Recife', 'America/Cuiaba', 'America/Porto_Velho', 'America/Rio_Branco', 'America/Campo_Grande']
@@ -46,9 +49,13 @@ export default function ConfiguracoesPage() {
   const [crudType, setCrudType] = useState<'tag' | 'doctype'>('tag')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [crudSaving, setCrudSaving] = useState(false)
-  const [alerts, setAlerts] = useState<Record<string, boolean>>({ alert_30: true, alert_15: true, alert_7: true, alert_3: false, alert_1: false, alert_0: false })
+  const [alerts, setAlerts] = useState<Record<string, boolean>>({ alert30: true, alert15: true, alert7: true, alert3: false, alert1: false, alert0: false })
   const [tags, setTags] = useState<Array<{ id: string; name: string; color: string }>>([])
   const [docTypes, setDocTypes] = useState<Array<{ id: string; name: string; category: string | null; allowedFormats: string }>>([])
+  const [passwordMinLength, setPasswordMinLength] = useState(8)
+  const [auditRetentionDays, setAuditRetentionDays] = useState('365')
+  const [sessions, setSessions] = useState<Array<{ id: string; expiresAt: string }>>([])
+  const [privacySubmitting, setPrivacySubmitting] = useState<string | null>(null)
 
   const fetchOrg = useCallback(async () => {
     try {
@@ -56,7 +63,10 @@ export default function ConfiguracoesPage() {
       if (res.ok) {
         const d = await res.json()
         setOrg({ name: d.name || '', tradeName: d.tradeName || '', cnpj: d.cnpj || '', email: d.email || '', phone: d.phone || '', logo: d.logo, timezone: d.timezone || 'America/Sao_Paulo', primaryColor: d.primaryColor || '#2563eb', settings: d.settings || {} })
-        setAlerts(d.settings?.alerts || { alert_30: true, alert_15: true, alert_7: true })
+        setAlerts(d.settings?.alerts || { alert30: true, alert15: true, alert7: true })
+        setPasswordMinLength(d.passwordMinLength || 8)
+        setAuditRetentionDays(String(d.auditRetentionDays || 365))
+        setSessions(Array.isArray(d.sessions) ? d.sessions : [])
       }
       // Fetch tags and doc types
       const [tagRes, dtRes] = await Promise.all([fetch('/api/tags'), fetch('/api/document-types')])
@@ -80,10 +90,25 @@ export default function ConfiguracoesPage() {
   async function saveOrg() {
     setSaving(true)
     try {
-      const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...org, settings: { ...org.settings, alerts } }) })
+      const res = await fetch('/api/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...org, passwordMinLength, auditRetentionDays: Number(auditRetentionDays), settings: { ...org.settings, alerts } }),
+      })
       const msg = res.ok ? 'Configurações salvas!' : 'Erro ao salvar'
       if (res.ok) toast.success(msg); else toast.error(msg)
     } catch (_e) { toast.error('Erro ao salvar') } finally { setSaving(false) }
+  }
+
+  async function handlePrivacyRequest(action: 'data_export_requested' | 'lgpd_request') {
+    setPrivacySubmitting(action)
+    try {
+      const res = await fetch('/api/audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) })
+      if (res.ok) {
+        toast.success(action === 'lgpd_request' ? 'Solicitação LGPD registrada. Entraremos em contato em até 15 dias.' : 'Exportação solicitada e registrada. Você será notificado quando estiver pronta.')
+      } else {
+        toast.error('Erro ao registrar solicitação')
+      }
+    } catch { toast.error('Erro ao registrar solicitação') } finally { setPrivacySubmitting(null) }
   }
 
   async function handleExport() {
@@ -203,12 +228,18 @@ export default function ConfiguracoesPage() {
         {/* Segurança */}
         <TabsContent value="seguranca" className="mt-4 space-y-4 max-w-2xl">
           <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Lock className="h-4 w-4" /> Política de Senha</CardTitle></CardHeader><CardContent className="space-y-4">
-            <div className="flex items-center justify-between"><div><p className="text-sm font-medium">Mínimo de caracteres</p></div><Input type="number" defaultValue={8} className="w-24 h-9" /></div>
+            <div className="flex items-center justify-between">
+              <div><p className="text-sm font-medium">Mínimo de caracteres</p></div>
+              <Input type="number" min={6} max={64} value={passwordMinLength} onChange={(e) => setPasswordMinLength(Number(e.target.value) || 8)} className="w-24 h-9" />
+            </div>
+            <Button size="sm" onClick={saveOrg} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salvar</Button>
             <Separator />
             <div className="flex items-center justify-between"><div><p className="text-sm font-medium">Autenticação de Dois Fatores (2FA)</p><p className="text-xs text-muted-foreground">Proteja sua conta com verificação em duas etapas</p></div><Switch disabled /><Badge variant="outline">Em breve</Badge></div>
           </CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-base">Sessões Ativas</CardTitle></CardHeader><CardContent>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"><div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"><Globe className="h-5 w-5 text-primary" /></div><div className="flex-1"><p className="text-sm font-medium">Sessão atual</p><p className="text-xs text-muted-foreground">Navegador atual · Agora</p></div><Badge variant="secondary" className="text-[10px]">Ativa</Badge></div>
+          <Card><CardHeader><CardTitle className="text-base">Sessões Ativas</CardTitle><CardDescription>{sessions.length} sessão(ões) autenticada(s) neste navegador com sua conta.</CardDescription></CardHeader><CardContent className="space-y-2">
+            {sessions.length === 0 ? <p className="text-sm text-muted-foreground py-2">Nenhuma sessão ativa encontrada.</p> : sessions.map((s) => (
+              <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"><div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"><Globe className="h-5 w-5 text-primary" /></div><div className="flex-1"><p className="text-sm font-medium">Sessão {s.id}</p><p className="text-xs text-muted-foreground">Expira em {formatDate(s.expiresAt)}</p></div><Badge variant="secondary" className="text-[10px]">Ativa</Badge></div>
+            ))}
           </CardContent></Card>
         </TabsContent>
 
@@ -234,11 +265,18 @@ export default function ConfiguracoesPage() {
         {/* Dados e Privacidade */}
         <TabsContent value="privacidade" className="mt-4 space-y-4 max-w-2xl">
           <Card><CardHeader><CardTitle className="text-base">Exportar Dados</CardTitle><CardDescription>Exporte todos os dados da sua organização.</CardDescription></CardHeader><CardContent className="space-y-3">
-            <Button variant="outline" onClick={() => toast.info('Exportação de dados iniciada. Você será notificado.')}><Download className="mr-2 h-4 w-4" /> Solicitar Exportação Completa</Button>
+            <Button variant="outline" disabled={privacySubmitting === 'data_export_requested'} onClick={() => handlePrivacyRequest('data_export_requested')}>
+              {privacySubmitting === 'data_export_requested' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Download className="mr-2 h-4 w-4" /> Solicitar Exportação Completa
+            </Button>
           </CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-base">Política de Retenção</CardTitle></CardHeader><CardContent><div className="flex items-center justify-between"><div><p className="text-sm">Retenção de dados auditados</p><p className="text-xs text-muted-foreground">Período para manter registros de auditoria</p></div><Select defaultValue="365"><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="90">90 dias</SelectItem><SelectItem value="180">180 dias</SelectItem><SelectItem value="365">1 ano</SelectItem><SelectItem value="730">2 anos</SelectItem></SelectContent></Select></div></CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-base">Política de Retenção</CardTitle></CardHeader><CardContent><div className="flex items-center justify-between"><div><p className="text-sm">Retenção de dados auditados</p><p className="text-xs text-muted-foreground">Período para manter registros de auditoria</p></div><Select value={auditRetentionDays} onValueChange={(v) => { setAuditRetentionDays(v); }}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="90">90 dias</SelectItem><SelectItem value="180">180 dias</SelectItem><SelectItem value="365">1 ano</SelectItem><SelectItem value="730">2 anos</SelectItem></SelectContent></Select></div>
+            <Button size="sm" className="mt-3" onClick={saveOrg} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salvar</Button>
+          </CardContent></Card>
           <Card><CardHeader><CardTitle className="text-base">Solicitação LGPD</CardTitle><CardDescription>Exercite seus direitos conforme a Lei Geral de Proteção de Dados.</CardDescription></CardHeader><CardContent className="space-y-3">
-            <Button variant="outline" onClick={() => toast.info('Solicitação LGPD registrada. Entraremos em contato em até 15 dias.')}>Enviar Solicitação LGPD</Button>
+            <Button variant="outline" disabled={privacySubmitting === 'lgpd_request'} onClick={() => handlePrivacyRequest('lgpd_request')}>
+              {privacySubmitting === 'lgpd_request' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Enviar Solicitação LGPD
+            </Button>
           </CardContent></Card>
         </TabsContent>
       </Tabs>
