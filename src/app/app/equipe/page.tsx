@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Users, UserPlus, MoreHorizontal, Shield, ShieldCheck, ShieldAlert,
+  Users, UserPlus, MoreHorizontal, ShieldCheck, ShieldAlert,
   Mail, Loader2, X, Pencil, Ban, Send, Trash2, Search, UserCog, Building2, Plus, Loader,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -31,12 +31,12 @@ function getInitials(name: string) {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  owner: 'Proprietário', admin: 'Administrador', manager: 'Gerente',
+  owner: 'Proprietário', admin: 'Administrador',
   collaborator: 'Colaborador', viewer: 'Visualizador',
 }
 
 const ROLE_ICONS: Record<string, React.ElementType> = {
-  owner: ShieldAlert, admin: ShieldCheck, manager: Shield, collaborator: Users, viewer: Users,
+  owner: ShieldAlert, admin: ShieldCheck, collaborator: Users, viewer: Users,
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -101,9 +101,9 @@ export default function EquipePage() {
     } catch { toast.error('Erro ao convidar membro') } finally { setSubmitting(false) }
   }
 
-  async function handleMemberAction(memberId: string, action: string) {
+  async function handleMemberAction(memberId: string, status: string) {
     try {
-      const res = await fetch('/api/team', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: memberId, ...JSON.parse(`{"${action}": "${action === 'status' ? 'suspended' : action}"}`) }) })
+      const res = await fetch('/api/team', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: memberId, status }) })
       if (res.ok) { toast.success('Ação realizada com sucesso'); fetchData() }
     } catch { toast.error('Erro ao realizar ação') }
   }
