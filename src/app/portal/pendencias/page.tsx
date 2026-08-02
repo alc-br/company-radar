@@ -37,9 +37,8 @@ export default function PendenciasPage() {
   const [commenting, setCommenting] = useState(false)
 
   const fetchTasks = useCallback(async () => {
-    const session = JSON.parse(localStorage.getItem('cr_portal') || '{}')
     try {
-      const res = await fetch(`/api/tasks?portalVisible=true&clientId=${session.clientId || ''}`)
+      const res = await fetch('/api/v1/portal/tasks')
       if (res.ok) { const d = await res.json(); setTasks(Array.isArray(d) ? d : []) }
     } catch {} finally { setLoading(false) }
   }, [])
@@ -48,8 +47,9 @@ export default function PendenciasPage() {
 
   async function handleMarkDone(taskId: string) {
     try {
-      const res = await fetch(`/api/tasks/${taskId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'concluído' }) })
+      const res = await fetch(`/api/v1/portal/tasks/${taskId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'concluído' }) })
       if (res.ok) { toast.success('Ação marcada como concluída!'); fetchTasks(); setSelectedTask(null) }
+      else { const err = await res.json().catch(() => ({})); toast.error(err.error || 'Erro ao atualizar') }
     } catch { toast.error('Erro ao atualizar') }
   }
 
@@ -57,12 +57,12 @@ export default function PendenciasPage() {
     if (!selectedTask || !comment.trim()) return
     setCommenting(true)
     try {
-      const session = JSON.parse(localStorage.getItem('cr_portal') || '{}')
-      const res = await fetch(`/api/tasks/${selectedTask.id}/comments`, {
+      const res = await fetch(`/api/v1/portal/tasks/${selectedTask.id}/comments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: comment, userName: session.contactName || 'Cliente' }),
+        body: JSON.stringify({ content: comment }),
       })
       if (res.ok) { toast.success('Comentário adicionado!'); setComment('') }
+      else toast.error('Erro ao comentar')
     } catch { toast.error('Erro ao comentar') } finally { setCommenting(false) }
   }
 
@@ -75,21 +75,20 @@ export default function PendenciasPage() {
       if (!file || !selectedTask) return
       setUploading(true)
       try {
-        const session = JSON.parse(localStorage.getItem('cr_portal') || '{}')
         const fd = new FormData()
         fd.append('file', file)
         fd.append('name', file.name)
-        fd.append('clientId', session.clientId || '')
         fd.append('taskId', taskId)
-        const res = await fetch('/api/documents', { method: 'POST', body: fd })
+        const res = await fetch('/api/v1/portal/documents', { method: 'POST', body: fd })
         if (res.ok) toast.success('Documento enviado!')
+        else toast.error('Erro ao enviar')
       } catch { toast.error('Erro ao enviar') } finally { setUploading(false) }
     }
     input.click()
   }
 
-  const pending = tasks.filter((t) => t.status !== 'concluído')
-  const done = tasks.filter((t) => t.status === 'concluído')
+  const pending = tasks.filter((t) => t.status !== 'concluida')
+  const done = tasks.filter((t) => t.status === 'concluida')
 
   return (
     <div className="space-y-6">

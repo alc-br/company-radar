@@ -27,11 +27,11 @@ export default function PortalHomePage() {
     if (!session) return
 
     Promise.all([
-      fetch(`/api/tasks?portalVisible=true&clientId=${session.clientId}`).then((r) => r.ok ? r.json() : []),
-      fetch(`/api/document-requests?clientId=${session.clientId}&status=solicitado`).then((r) => r.ok ? r.json() : []),
-      fetch(`/api/calendar?type=deadline`).then((r) => r.ok ? r.json() : { events: [] }),
+      fetch('/api/v1/portal/tasks').then((r) => r.ok ? r.json() : []),
+      fetch('/api/v1/portal/document-requests?status=solicitado').then((r) => r.ok ? r.json() : []),
+      fetch('/api/v1/portal/calendar').then((r) => r.ok ? r.json() : { events: [] }),
     ]).then(([t, dr, c]) => {
-      setTasks(Array.isArray(t) ? t.filter((task: { status: string }) => task.status !== 'concluído') : [])
+      setTasks(Array.isArray(t) ? t.filter((task: { status: string }) => task.status !== 'concluida') : [])
       const drData = dr.requests || dr
       setDocRequests(Array.isArray(drData) ? drData : [])
       setDeadlines((c.events || []).slice(0, 5))

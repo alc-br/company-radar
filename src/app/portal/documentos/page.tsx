@@ -32,11 +32,10 @@ export default function PortalDocumentosPage() {
   const [tab, setTab] = useState('documentos')
 
   const fetchData = useCallback(async () => {
-    const session = JSON.parse(localStorage.getItem('cr_portal') || '{}')
     try {
       const [docRes, reqRes] = await Promise.all([
-        fetch(`/api/documents?clientId=${session.clientId || ''}`),
-        fetch(`/api/document-requests?clientId=${session.clientId || ''}`),
+        fetch('/api/v1/portal/documents'),
+        fetch('/api/v1/portal/document-requests'),
       ])
       if (docRes.ok) { const d = await docRes.json(); setDocs(Array.isArray(d.documents) ? d.documents : (Array.isArray(d) ? d : [])) }
       if (reqRes.ok) { const d = await reqRes.json(); setRequests(Array.isArray(d.requests) ? d.requests : (Array.isArray(d) ? d : [])) }
@@ -53,13 +52,13 @@ export default function PortalDocumentosPage() {
       const file = input.files?.[0]
       if (!file) return
       try {
-        const session = JSON.parse(localStorage.getItem('cr_portal') || '{}')
         const fd = new FormData()
         fd.append('file', file)
         fd.append('name', file.name)
-        fd.append('clientId', session.clientId || '')
-        const res = await fetch('/api/documents', { method: 'POST', body: fd })
+        if (req?.id) fd.append('requestId', req.id)
+        const res = await fetch('/api/v1/portal/documents', { method: 'POST', body: fd })
         if (res.ok) { toast.success('Documento enviado!'); fetchData() }
+        else toast.error('Erro ao enviar')
       } catch { toast.error('Erro ao enviar') }
     }
     input.click()

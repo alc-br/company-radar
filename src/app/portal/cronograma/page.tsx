@@ -31,7 +31,7 @@ export default function PortalCronogramaPage() {
     try {
       const start = new Date(year, month - 1, 15).toISOString()
       const end = new Date(year, month + 1, 15).toISOString()
-      const res = await fetch(`/api/calendar?start=${start}&end=${end}`)
+      const res = await fetch(`/api/v1/portal/calendar?start=${start}&end=${end}`)
       if (res.ok) { const d = await res.json(); setEvents((d.events || []).filter((e: CalEvent) => e.type !== 'meeting')) }
     } catch {} finally { setLoading(false) }
   }, [year, month])
