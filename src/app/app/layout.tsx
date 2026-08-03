@@ -454,7 +454,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       {searchResults.clients.slice(0, 5).map((c) => (
                         <Link
                           key={c.id}
-                          href={`/app/empresas?id=${c.id}`}
+                          href={`/app/empresas/${c.id}`}
                           className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted transition-colors"
                           onClick={() => setSearchOpen(false)}
                         >
@@ -476,7 +476,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       {searchResults.tasks.slice(0, 5).map((t) => (
                         <Link
                           key={t.id}
-                          href={`/app/tarefas?id=${t.id}`}
+                          href={`/app/tarefas/${t.id}`}
                           className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted transition-colors"
                           onClick={() => setSearchOpen(false)}
                         >
@@ -500,7 +500,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       {searchResults.templates.slice(0, 5).map((t) => (
                         <Link
                           key={t.id}
-                          href={`/app/templates?id=${t.id}`}
+                          href={`/app/templates/${t.id}`}
                           className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted transition-colors"
                           onClick={() => setSearchOpen(false)}
                         >
