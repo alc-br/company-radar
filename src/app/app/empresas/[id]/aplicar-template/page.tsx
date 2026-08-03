@@ -43,8 +43,6 @@ interface Template {
   color: string
   status: string
   currentVersion: number
-  variables: string
-  versions: TemplateVersion[]
   department?: { id: string; name: string } | null
 }
 
@@ -52,8 +50,8 @@ interface TemplateVersion {
   id: string
   versionNumber: number
   name: string | null
-  description: string | null
-  stages: string
+  stages: Stage[]
+  variables: TemplateVariable[]
   publishedAt: string | null
   isCurrent: boolean
 }
@@ -73,7 +71,7 @@ interface Stage {
 interface StageTask {
   title: string
   description?: string
-  daysOffset?: number
+  dueDateRule?: { type: string; value?: number }
   priority?: string
   department?: string
   role?: string
@@ -95,10 +93,30 @@ function formatDate(dateStr: string): string {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
 
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr)
-  d.setDate(d.getDate() + (days || 0))
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+// Espelha _compute_due_date() do backend (apps/radar_tasks/services.py) —
+// os tipos reais sao base_date/days_before/days_after/fixed_month_day/no_deadline
+// (ver Select de "Regra de Prazo" em templates/[id]/page.tsx).
+function computeDueDate(baseDateStr: string, rule?: { type: string; value?: number }): string {
+  const base = new Date(`${baseDateStr}T00:00:00`)
+  if (!rule || !rule.type || rule.type === 'base_date') return formatDate(baseDateStr)
+  if (rule.type === 'no_deadline') return 'Sem prazo'
+  const value = rule.value || 0
+  if (rule.type === 'days_before') {
+    const d = new Date(base)
+    d.setDate(d.getDate() - value)
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  }
+  if (rule.type === 'days_after') {
+    const d = new Date(base)
+    d.setDate(d.getDate() + value)
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  }
+  if (rule.type === 'fixed_month_day') {
+    const day = Math.min(value || base.getDate(), new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate())
+    const d = new Date(base.getFullYear(), base.getMonth(), day)
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  }
+  return formatDate(baseDateStr)
 }
 
 // ── Page ───────────────────────────────────────────────────
@@ -119,6 +137,26 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
   // Step 1: Template selection
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [selectedVersionId, setSelectedVersionId] = useState('')
+  const [versions, setVersions] = useState<TemplateVersion[]>([])
+  const [loadingVersions, setLoadingVersions] = useState(false)
+
+  function selectTemplate(templateId: string) {
+    setSelectedTemplateId(templateId)
+    setSelectedVersionId('')
+    setVersions([])
+    if (!templateId) return
+    setLoadingVersions(true)
+    fetch(`/api/templates/${templateId}/versions`)
+      .then(r => r.ok ? r.json() : { versions: [] })
+      .then(data => {
+        const vs: TemplateVersion[] = Array.isArray(data.versions) ? data.versions : []
+        setVersions(vs)
+        const current = vs.find(v => v.isCurrent)
+        setSelectedVersionId(current?.id || vs[0]?.id || '')
+      })
+      .catch(() => setVersions([]))
+      .finally(() => setLoadingVersions(false))
+  }
 
   // Step 2: Base date and variables
   const [baseDate, setBaseDate] = useState('')
@@ -133,9 +171,9 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
 
   // Computed
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
-  const selectedVersion = selectedTemplate?.versions.find(v => v.id === selectedVersionId)
-  const stages: Stage[] = selectedVersion ? (JSON.parse(selectedVersion.stages || '[]')) : []
-  const templateVars: TemplateVariable[] = selectedTemplate ? (JSON.parse(selectedTemplate.variables || '[]')) : []
+  const selectedVersion = versions.find(v => v.id === selectedVersionId)
+  const stages: Stage[] = selectedVersion?.stages || []
+  const templateVars: TemplateVariable[] = selectedVersion?.variables || []
 
   // ── Fetch data ───────────────────────────────────────────
   useEffect(() => {
@@ -298,12 +336,7 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
               </div>
             ) : (
               <>
-                <Select value={selectedTemplateId} onValueChange={v => {
-                  setSelectedTemplateId(v)
-                  const tmpl = templates.find(t => t.id === v)
-                  const current = tmpl?.versions.find(ver => ver.isCurrent)
-                  setSelectedVersionId(current?.id || tmpl?.versions[0]?.id || '')
-                }}>
+                <Select value={selectedTemplateId} onValueChange={selectTemplate}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione um template" />
                   </SelectTrigger>
@@ -327,18 +360,22 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
                     )}
                     <div className="space-y-2">
                       <Label>Versão</Label>
-                      <Select value={selectedVersionId} onValueChange={setSelectedVersionId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a versão" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {selectedTemplate.versions.filter(v => v.publishedAt).map(v => (
-                            <SelectItem key={v.id} value={v.id}>
-                              Versão {v.versionNumber}{v.name ? ` — ${v.name}` : ''}{v.isCurrent ? ' (atual)' : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {loadingVersions ? (
+                        <Skeleton className="h-9" />
+                      ) : (
+                        <Select value={selectedVersionId} onValueChange={setSelectedVersionId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a versão" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {versions.filter(v => v.publishedAt).map(v => (
+                              <SelectItem key={v.id} value={v.id}>
+                                Versão {v.versionNumber}{v.name ? ` — ${v.name}` : ''}{v.isCurrent ? ' (atual)' : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                     {selectedVersion && (
                       <div className="rounded-lg border bg-muted/30 p-3 text-sm">
@@ -553,7 +590,7 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
                                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                   <span className="inline-flex items-center gap-1">
                                     <Calendar className="h-3 w-3" />
-                                    {addDays(baseDate, task.daysOffset || 0)}
+                                    {computeDueDate(baseDate, task.dueDateRule)}
                                   </span>
                                   {task.priority && (
                                     <Badge variant="outline" className="text-[10px] capitalize">{task.priority}</Badge>
