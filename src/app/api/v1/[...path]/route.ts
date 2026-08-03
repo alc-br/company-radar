@@ -45,9 +45,12 @@ async function proxy(request: NextRequest, { params }: { params: Promise<{ path:
     const res = await fetch(url, init)
     const resHeaders = new Headers(res.headers)
     resHeaders.delete('transfer-encoding')
+    resHeaders.delete('set-cookie')
 
-    const setCookie = rewriteCookies(res.headers.get('set-cookie'), request)
-    if (setCookie) resHeaders.set('set-cookie', setCookie)
+    for (const cookie of res.headers.getSetCookie()) {
+      const rewritten = rewriteCookies(cookie, request)
+      if (rewritten) resHeaders.append('set-cookie', rewritten)
+    }
 
     return new NextResponse(res.body, {
       status: res.status,
