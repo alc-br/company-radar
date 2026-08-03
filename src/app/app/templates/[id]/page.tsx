@@ -688,6 +688,11 @@ export default function TemplateDetailPage({ params }: { params: Promise<{ id: s
                                             </Select>
                                           </div>
                                           <div className="space-y-1">
+                                            <Label className="text-[11px]">Papel</Label>
+                                            <Input value={task.role} onChange={e => updateTaskField(stage.id, task.id, 'role', e.target.value)}
+                                              placeholder="Ex: Responsável Fiscal" className="h-8 text-xs" />
+                                          </div>
+                                          <div className="space-y-1">
                                             <Label className="text-[11px]">Departamento</Label>
                                             <Select value={task.department} onValueChange={v => updateTaskField(stage.id, task.id, 'department', v)}>
                                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Nenhum" /></SelectTrigger>
