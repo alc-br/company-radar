@@ -62,6 +62,14 @@ import {
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const EMPRESAS_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="emp-header"]', title: 'Empresas', description: 'Aqui ficam todos os clientes da sua organização — cada um com seus templates, tarefas e documentos.' },
+  { selector: '[data-tour="emp-actions"]', title: 'Ações rápidas', description: 'Exporte a lista, importe clientes em massa por CSV ou cadastre um novo cliente.' },
+  { selector: '[data-tour="emp-search"]', title: 'Buscar e filtrar', description: 'Busque por nome, nome fantasia ou CNPJ, ou use os filtros para refinar por status, segmento, responsável ou tag.' },
+  { selector: '[data-tour="emp-table"]', title: 'Lista de clientes', description: 'Clique em qualquer linha para abrir a ficha completa do cliente — tarefas, templates aplicados, documentos e contatos.' },
+]
 
 // ── Types ──────────────────────────────────────────────────
 type Session = {
@@ -148,6 +156,7 @@ function getNextDate(client: ClientRow): string | null {
 export default function EmpresasPage() {
   const router = useRouter()
   const session = getSession()
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('empresas')
 
   // Data
   const [clients, setClients] = useState<ClientRow[]>([])
@@ -358,16 +367,20 @@ export default function EmpresasPage() {
   // ── Render ──────────────────────────────────────────────
   return (
     <div className="space-y-4">
+      <PageTour steps={EMPRESAS_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Empresas</h1>
-          <p className="text-sm text-muted-foreground">
-            Gerencie os clientes da sua organização
-            {!loading && <span className="ml-1">· {total} total</span>}
-          </p>
-        </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-tour="emp-header">
         <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Empresas</h1>
+            <p className="text-sm text-muted-foreground">
+              Gerencie os clientes da sua organização
+              {!loading && <span className="ml-1">· {total} total</span>}
+            </p>
+          </div>
+          <TourRestartButton onClick={startTour} />
+        </div>
+        <div className="flex items-center gap-2" data-tour="emp-actions">
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="mr-2 h-4 w-4" />
             Exportar
@@ -384,7 +397,7 @@ export default function EmpresasPage() {
       </div>
 
       {/* Search + Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center" data-tour="emp-search">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -524,7 +537,7 @@ export default function EmpresasPage() {
       )}
 
       {/* Table */}
-      <div className="rounded-xl border bg-white shadow-sm">
+      <div className="rounded-xl border bg-white shadow-sm" data-tour="emp-table">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>

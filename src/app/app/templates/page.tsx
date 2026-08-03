@@ -58,6 +58,14 @@ import {
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const TEMPLATES_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="tpl-header"]', title: 'Templates', description: 'Templates definem etapas e tarefas padronizadas que você aplica em qualquer cliente — a base da automação de prazos.' },
+  { selector: '[data-tour="tpl-create"]', title: 'Criar Template', description: 'Comece por aqui: dê um nome, defina as etapas, tarefas e regras de prazo de cada uma.' },
+  { selector: '[data-tour="tpl-search"]', title: 'Buscar e visualizar', description: 'Busque por nome ou código, filtre por categoria/status e alterne entre visualização em grade ou lista.' },
+  { selector: '[data-tour="tpl-list"]', title: 'Seus templates', description: 'Depois de publicado, um template pode ser aplicado a clientes reais na tela de cada empresa.' },
+]
 
 // ── Types ──────────────────────────────────────────────────
 interface TemplateRow {
@@ -116,6 +124,7 @@ function formatDate(iso: string): string {
 export default function TemplatesPage() {
   const router = useRouter()
   const session = getSession()
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('templates')
 
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -289,15 +298,19 @@ export default function TemplatesPage() {
   // ── Render ────────────────────────────────────────────────
   return (
     <div className="space-y-6">
+      <PageTour steps={TEMPLATES_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Templates</h1>
-          <p className="text-sm text-muted-foreground">
-            Gerencie seus templates de processos e checklists
-          </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-tour="tpl-header">
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Templates</h1>
+            <p className="text-sm text-muted-foreground">
+              Gerencie seus templates de processos e checklists
+            </p>
+          </div>
+          <TourRestartButton onClick={startTour} />
         </div>
-        <Button asChild>
+        <Button asChild data-tour="tpl-create">
           <Link href="/app/templates/novo">
             <Plus className="mr-2 h-4 w-4" />
             Criar Template
@@ -306,7 +319,7 @@ export default function TemplatesPage() {
       </div>
 
       {/* Search + View Toggle */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center" data-tour="tpl-search">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -418,6 +431,7 @@ export default function TemplatesPage() {
       )}
 
       {/* Content */}
+      <div data-tour="tpl-list">
       {loading ? (
         <div className={viewMode === 'grid' ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-2'}>
           {Array.from({ length: 6 }).map((_, i) => (
@@ -658,6 +672,7 @@ export default function TemplatesPage() {
           </Table>
         </div>
       )}
+      </div>
 
       {/* ═══ Clone Dialog ═══ */}
       <Dialog open={cloneDialogOpen} onOpenChange={setCloneDialogOpen}>
