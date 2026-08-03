@@ -45,6 +45,17 @@ import {
 } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const DASH_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="dash-header"]', title: 'Visão Geral', description: 'Este é o painel principal: um resumo em tempo real da operação do seu escritório.' },
+  { selector: '[data-tour="dash-filters"]', title: 'Filtros', description: 'Ajuste o período e filtre por departamento ou responsável para focar nos números que importam.' },
+  { selector: '[data-tour="dash-stats"]', title: 'Indicadores', description: 'Cada cartão é clicável e leva direto para a lista filtrada correspondente (ex.: tarefas atrasadas).' },
+  { selector: '[data-tour="dash-attention"]', title: 'O que exige atenção hoje', description: 'Um resumo rápido do que precisa de ação imediata: vencendo hoje, atrasadas, sem responsável e documentos aguardando.' },
+  { selector: '[data-tour="dash-critical"]', title: 'Tarefas Críticas', description: 'Tarefas de alta prioridade que estão atrasadas ou vencendo hoje aparecem aqui primeiro.' },
+  { selector: '[data-tour="dash-upcoming"]', title: 'Próximos 7 dias', description: 'Prévia do que vence na próxima semana, com atalho direto para o calendário completo.' },
+  { selector: '[data-tour="dash-activity"]', title: 'Atividade Recente', description: 'Acompanhe o que a equipe (e o sistema) tem feito recentemente, sem precisar abrir cada tarefa.' },
+]
 
 // ── Types ──────────────────────────────────────────────────
 interface DashboardStats {
@@ -220,6 +231,7 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState('month')
   const [departmentId, setDepartmentId] = useState('all')
   const [responsible, setResponsible] = useState('all')
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('dashboard')
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -259,15 +271,19 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <PageTour steps={DASH_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
       {/* Page Header + Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Visão Geral</h1>
-          <p className="text-sm text-muted-foreground">
-            Resumo da operação do seu escritório
-          </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-tour="dash-header">
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Visão Geral</h1>
+            <p className="text-sm text-muted-foreground">
+              Resumo da operação do seu escritório
+            </p>
+          </div>
+          <TourRestartButton onClick={startTour} />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-tour="dash-filters">
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="h-9 w-[150px]">
               <SelectValue />
@@ -322,7 +338,7 @@ export default function DashboardPage() {
       )}
 
       {/* Stat Cards Grid */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" data-tour="dash-stats">
         <StatCard
           icon={Building2}
           label="Empresas Ativas"
@@ -393,7 +409,7 @@ export default function DashboardPage() {
       {/* Middle Row: Attention + Critical Tasks */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* O que exige atenção hoje */}
-        <Card>
+        <Card data-tour="dash-attention">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -506,7 +522,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Tarefas Críticas */}
-        <Card>
+        <Card data-tour="dash-critical">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -586,7 +602,7 @@ export default function DashboardPage() {
       {/* Bottom Row: Upcoming + Overdue by Dept + Activity */}
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Próximos 7 dias */}
-        <Card className="lg:col-span-1">
+        <Card className="lg:col-span-1" data-tour="dash-upcoming">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -707,7 +723,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Atividade Recente */}
-        <Card className="lg:col-span-1">
+        <Card className="lg:col-span-1" data-tour="dash-activity">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
