@@ -45,7 +45,7 @@ export default function SolicitarDocumentoPage() {
   useEffect(() => {
     fetch('/api/clients')
       .then((r) => r.ok ? r.json() : [])
-      .then((d) => setClients(Array.isArray(d) ? d : []))
+      .then((d) => setClients(Array.isArray(d) ? d : (d.clients || [])))
       .catch(() => {})
   }, [])
 
