@@ -233,7 +233,7 @@ export default function DocumentosPage() {
                 <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  {clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                  {clients.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
@@ -243,7 +243,7 @@ export default function DocumentosPage() {
                 <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  {docTypes.map((t) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}
+                  {docTypes.map((t) => (<SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
@@ -370,14 +370,14 @@ export default function DocumentosPage() {
               <Label>Cliente *</Label>
               <Select value={uploadForm.clientId} onValueChange={(v) => setUploadForm({ ...uploadForm, clientId: v })}>
                 <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
-                <SelectContent>{clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent>
+                <SelectContent>{clients.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>))}</SelectContent>
               </Select>
             </div>
             <div className="grid gap-2">
               <Label>Tipo de documento</Label>
               <Select value={uploadForm.typeId} onValueChange={(v) => setUploadForm({ ...uploadForm, typeId: v })}>
                 <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
-                <SelectContent>{docTypes.map((t) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
+                <SelectContent>{docTypes.map((t) => (<SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>))}</SelectContent>
               </Select>
             </div>
             <div className="grid gap-2">

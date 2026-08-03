@@ -287,7 +287,7 @@ export default function DashboardPage() {
               <SelectContent>
                 <SelectItem value="all">Todos os Departamentos</SelectItem>
                 {data.filters.departments.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

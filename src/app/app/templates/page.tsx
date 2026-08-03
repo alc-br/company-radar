@@ -394,7 +394,7 @@ export default function TemplatesPage() {
               <SelectContent>
                 <SelectItem value="__all__">Todos</SelectItem>
                 {members.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

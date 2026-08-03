@@ -324,7 +324,7 @@ export default function NovaTarefaPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {members.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                        <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -341,7 +341,7 @@ export default function NovaTarefaPage() {
                     <SelectContent>
                       <SelectItem value="__none__">Nenhum</SelectItem>
                       {members.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                        <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -369,7 +369,7 @@ export default function NovaTarefaPage() {
                     <SelectContent>
                       <SelectItem value="__none__">Nenhum</SelectItem>
                       {departments.map((d) => (
-                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -425,7 +425,7 @@ export default function NovaTarefaPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

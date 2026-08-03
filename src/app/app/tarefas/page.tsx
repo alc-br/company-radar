@@ -855,7 +855,7 @@ export default function TarefasPage() {
                 <SelectContent>
                   <SelectItem value="__all__">Todos</SelectItem>
                   {departments.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -870,7 +870,7 @@ export default function TarefasPage() {
                 <SelectContent>
                   <SelectItem value="__all__">Todos</SelectItem>
                   {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

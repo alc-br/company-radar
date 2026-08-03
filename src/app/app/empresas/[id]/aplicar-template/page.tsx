@@ -346,7 +346,7 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
                   </SelectTrigger>
                   <SelectContent>
                     {templates.filter(t => t.status === 'published').map(t => (
-                      <SelectItem key={t.id} value={t.id}>
+                      <SelectItem key={t.id} value={String(t.id)}>
                         <div className="flex items-center gap-2">
                           <div className="h-3 w-3 rounded-full" style={{ backgroundColor: t.color }} />
                           {t.name}
@@ -373,7 +373,7 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
                           </SelectTrigger>
                           <SelectContent>
                             {versions.filter(v => v.publishedAt).map(v => (
-                              <SelectItem key={v.id} value={v.id}>
+                              <SelectItem key={v.id} value={String(v.id)}>
                                 Versão {v.versionNumber}{v.name ? ` — ${v.name}` : ''}{v.isCurrent ? ' (atual)' : ''}
                               </SelectItem>
                             ))}
@@ -486,7 +486,7 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
                       </SelectTrigger>
                       <SelectContent>
                         {members.map(m => (
-                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                          <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -504,7 +504,7 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
                       </SelectTrigger>
                       <SelectContent>
                         {members.map(m => (
-                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                          <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

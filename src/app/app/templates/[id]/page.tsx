@@ -160,7 +160,7 @@ export default function TemplateDetailPage({ params }: { params: Promise<{ id: s
           if (s.length > 0) setExpandedStages(new Set([s[0].id]))
           setMetaName(d.name); setMetaCode(d.code || ''); setMetaDesc(d.description || '')
           setMetaPurpose(d.purpose || ''); setMetaCategory(d.category || ''); setMetaColor(d.color)
-          setMetaResponsible(d.responsibleId || ''); setMetaInstructions(d.instructions || '')
+          setMetaResponsible(d.responsibleId != null ? String(d.responsibleId) : ''); setMetaInstructions(d.instructions || '')
           setMetaWarning(d.warning || ''); setMetaPeriodicity(d.defaultPeriodicity || '')
         } else {
           toast.error('Template não encontrado')
@@ -472,7 +472,7 @@ export default function TemplateDetailPage({ params }: { params: Promise<{ id: s
                       <Label>Responsável Técnico</Label>
                       <Select value={metaResponsible} onValueChange={v => { setMetaResponsible(v); setMetaDirty(true) }}>
                         <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>{members.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
+                        <SelectContent>{members.map(m => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
@@ -691,14 +691,14 @@ export default function TemplateDetailPage({ params }: { params: Promise<{ id: s
                                             <Label className="text-[11px]">Departamento</Label>
                                             <Select value={task.department} onValueChange={v => updateTaskField(stage.id, task.id, 'department', v)}>
                                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                                              <SelectContent>{members.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
+                                              <SelectContent>{members.map(m => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}</SelectContent>
                                             </Select>
                                           </div>
                                           <div className="space-y-1">
                                             <Label className="text-[11px]">Revisor</Label>
                                             <Select value={task.reviewer} onValueChange={v => updateTaskField(stage.id, task.id, 'reviewer', v)}>
                                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                                              <SelectContent>{members.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
+                                              <SelectContent>{members.map(m => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}</SelectContent>
                                             </Select>
                                           </div>
                                           <div className="space-y-1">

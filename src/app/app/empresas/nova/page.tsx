@@ -455,7 +455,7 @@ export default function NovoClientePage() {
                 </SelectTrigger>
                 <SelectContent>
                   {members.map(m => (
-                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                    <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -491,7 +491,7 @@ export default function NovoClientePage() {
                     {tags
                       .filter(t => !selectedTags.includes(t.id))
                       .map(t => (
-                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                        <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
                       ))}
                   </SelectContent>
                 </Select>
