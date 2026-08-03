@@ -28,6 +28,8 @@ function formatDate(d?: string | null) {
   return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`
 }
 
+const PRIORITY_LABELS: Record<string, string> = { low: 'Baixa', medium: 'Média', high: 'Alta', urgent: 'Urgente' }
+
 export default function PendenciasPage() {
   const [tasks, setTasks] = useState<PortalTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -106,7 +108,7 @@ export default function PendenciasPage() {
                   <CardContent className="flex items-center gap-4 p-4">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50"><Clock className="h-5 w-5 text-amber-500" /></div>
                     <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{t.title}</p><p className="text-xs text-muted-foreground mt-0.5">{t.portalInstructions || t.description || 'Clique para ver detalhes'}</p></div>
-                    <div className="flex items-center gap-2 shrink-0"><Badge variant={t.priority === 'urgent' ? 'destructive' : 'outline'} className="text-[10px]">{t.priority}</Badge><Badge variant="outline" className="text-[10px]">{formatDate(t.dueDate)}</Badge></div>
+                    <div className="flex items-center gap-2 shrink-0"><Badge variant={t.priority === 'urgent' ? 'destructive' : 'outline'} className="text-[10px]">{PRIORITY_LABELS[t.priority] || t.priority}</Badge><Badge variant="outline" className="text-[10px]">{formatDate(t.dueDate)}</Badge></div>
                   </CardContent>
                 </Card>
               ))}
