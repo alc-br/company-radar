@@ -72,20 +72,24 @@ export default function RelatoriosPage() {
 
   // ── Produtividade Tab ────────────────────────────────────
   function Produtividade() {
-    const d = data as Record<string, number | Array<{ name: string; completed: number; total: number; avgTime: number }>>
-    const personLoad = (d.personLoad || []) as Array<{ name: string; completed: number; total: number; avgTime: number }>
+    const d = data as Record<string, number | null | Array<{ name: string; completed: number; total: number; avgTime: number | null }>>
+    const personLoad = (d.personLoad || []) as Array<{ name: string; completed: number; total: number; avgTime: number | null }>
+    const completedTrend = d.completedTrend as number | null
+    const overdueTrend = d.overdueTrend as number | null
+    const avgTime = d.avgTime as number | null
     return (
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard title="Concluídas" value={fmtNum(d.completed ?? 0)} icon={CheckCircle2} color="bg-green-500" trend="up" trendLabel="+12%" />
+          <StatCard title="Concluídas" value={fmtNum(d.completed ?? 0)} icon={CheckCircle2} color="bg-green-500" trend={completedTrend == null ? undefined : completedTrend >= 0 ? 'up' : 'down'} trendLabel={completedTrend == null ? undefined : `${completedTrend > 0 ? '+' : ''}${completedTrend}%`} />
           <StatCard title="No Prazo" value={fmtNum(d.onTime ?? 0)} icon={CheckCircle2} color="bg-emerald-500" />
-          <StatCard title="Atrasadas" value={fmtNum(d.overdue ?? 0)} icon={AlertTriangle} color="bg-red-500" trend="down" trendLabel="-5%" />
-          <StatCard title="Tempo Médio" value={`${d.avgTime ?? 0}h`} icon={Clock} color="bg-blue-500" />
+          <StatCard title="Atrasadas" value={fmtNum(d.overdue ?? 0)} icon={AlertTriangle} color="bg-red-500" trend={overdueTrend == null ? undefined : overdueTrend <= 0 ? 'up' : 'down'} trendLabel={overdueTrend == null ? undefined : `${overdueTrend > 0 ? '+' : ''}${overdueTrend}%`} />
+          <StatCard title="Tempo Médio" value={avgTime == null ? '—' : `${avgTime}h`} icon={Clock} color="bg-blue-500" />
         </div>
+        {(completedTrend != null || overdueTrend != null) && <p className="text-xs text-muted-foreground -mt-2">Comparado ao período anterior de mesma duração</p>}
         <Card><CardHeader><CardTitle className="text-base">Carga por Pessoa</CardTitle></CardHeader><CardContent>
           {personLoad.length === 0 ? (<p className="text-sm text-muted-foreground text-center py-6">Sem dados disponíveis</p>) : (
             <Table><TableHeader><TableRow><TableHead>Pessoa</TableHead><TableHead className="text-right">Concluídas</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Tempo Médio</TableHead><TableHead className="text-right">% Conclusão</TableHead></TableRow></TableHeader>
-              <TableBody>{personLoad.map((p, i) => (<TableRow key={i}><TableCell className="font-medium">{p.name}</TableCell><TableCell className="text-right">{p.completed}</TableCell><TableCell className="text-right">{p.total}</TableCell><TableCell className="text-right">{p.avgTime}h</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><div className="h-2 w-16 rounded-full bg-muted"><div className="h-2 rounded-full bg-green-500" style={{ width: `${p.total ? (p.completed / p.total) * 100 : 0}%` }} /></div><span className="text-xs">{p.total ? Math.round((p.completed / p.total) * 100) : 0}%</span></div></TableCell></TableRow>))}</TableBody></Table>
+              <TableBody>{personLoad.map((p, i) => (<TableRow key={i}><TableCell className="font-medium">{p.name}</TableCell><TableCell className="text-right">{p.completed}</TableCell><TableCell className="text-right">{p.total}</TableCell><TableCell className="text-right">{p.avgTime == null ? '—' : `${p.avgTime}h`}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><div className="h-2 w-16 rounded-full bg-muted"><div className="h-2 rounded-full bg-green-500" style={{ width: `${p.total ? (p.completed / p.total) * 100 : 0}%` }} /></div><span className="text-xs">{p.total ? Math.round((p.completed / p.total) * 100) : 0}%</span></div></TableCell></TableRow>))}</TableBody></Table>
           )}
         </CardContent></Card>
       </div>
