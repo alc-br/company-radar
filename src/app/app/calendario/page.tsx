@@ -131,11 +131,20 @@ export default function CalendarioPage() {
             </div>
           ))}
         </div>
+        <div className="grid grid-cols-8 border-b min-w-[700px]">
+          <div className="py-2 px-2 text-xs text-muted-foreground border-r text-right pr-3">Dia inteiro</div>
+          {days.map((d, di) => {
+            const evts = filteredEvents.filter((e) => { const ed = new Date(e.startDate); return isSameDay(ed, d) && (e.allDay || ed.getHours() === 0) })
+            return (<div key={di} className="py-1 px-1 border-r last:border-r-0 min-h-[32px]">
+              {evts.map((ev) => { const color = ev.color || TYPE_COLORS[ev.type] || '#6b7280'; return (<button key={ev.id} className="w-full rounded px-1.5 py-0.5 text-left text-[10px] font-medium text-white mb-0.5" style={{ backgroundColor: color }} onClick={() => setSelectedEvent(ev)}>{ev.title}</button>) })}
+            </div>)
+          })}
+        </div>
         {hours.map((h) => (
           <div key={h} className="grid grid-cols-8 border-b last:border-b-0 min-w-[700px]">
             <div className="py-3 px-2 text-xs text-muted-foreground border-r text-right pr-3">{String(h).padStart(2, '0')}:00</div>
             {days.map((d, di) => {
-              const evts = filteredEvents.filter((e) => { const ed = new Date(e.startDate); return isSameDay(ed, d) && ed.getHours() === h })
+              const evts = filteredEvents.filter((e) => { const ed = new Date(e.startDate); return isSameDay(ed, d) && !e.allDay && ed.getHours() === h && ed.getHours() !== 0 })
               return (<div key={di} className="py-1 px-1 border-r last:border-r-0 min-h-[48px]">
                 {evts.map((ev) => { const color = ev.color || TYPE_COLORS[ev.type] || '#6b7280'; return (<button key={ev.id} className="w-full rounded px-1.5 py-0.5 text-left text-[10px] font-medium text-white mb-0.5" style={{ backgroundColor: color }} onClick={() => setSelectedEvent(ev)}>{ev.title}</button>) })}
               </div>)
@@ -149,12 +158,25 @@ export default function CalendarioPage() {
   function renderDay() {
     const hours = Array.from({ length: 16 }, (_, i) => i + 7)
     const dayEvts = filteredEvents.filter((e) => isSameDay(new Date(e.startDate), currentDate))
+    const allDayEvts = dayEvts.filter((e) => e.allDay || new Date(e.startDate).getHours() === 0)
     return (
       <div className="rounded-lg border bg-white">
         <div className="border-b px-4 py-3"><p className="text-lg font-semibold">{DAYS_PT[currentDate.getDay()]}, {currentDate.getDate()} de {MONTHS_PT[currentDate.getMonth()]}</p></div>
+        {allDayEvts.length > 0 && (
+          <div className="flex border-b">
+            <div className="w-20 shrink-0 py-3 pr-4 text-right text-xs text-muted-foreground">Dia inteiro</div>
+            <div className="flex-1 border-l py-2 px-3">
+              {allDayEvts.map((ev) => { const color = ev.color || TYPE_COLORS[ev.type] || '#6b7280'; return (
+                <button key={ev.id} className="mb-1 w-full rounded-md px-3 py-2 text-left text-sm font-medium text-white" style={{ backgroundColor: color }} onClick={() => setSelectedEvent(ev)}>
+                  <div className="flex items-center gap-2">{ev.title}</div>
+                  {ev.clientName && <p className="text-xs opacity-80 mt-0.5">{ev.clientName}</p>}
+                </button>)})}
+            </div>
+          </div>
+        )}
         <div className="divide-y">
           {hours.map((h) => {
-            const evts = dayEvts.filter((e) => new Date(e.startDate).getHours() === h)
+            const evts = dayEvts.filter((e) => !e.allDay && new Date(e.startDate).getHours() === h && h !== 0)
             return (<div key={h} className="flex min-h-[60px]">
               <div className="w-20 shrink-0 py-3 pr-4 text-right text-xs text-muted-foreground">{String(h).padStart(2, '0')}:00</div>
               <div className="flex-1 border-l py-2 px-3">
