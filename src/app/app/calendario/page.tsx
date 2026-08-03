@@ -13,6 +13,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const CALENDARIO_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="cal-header"]', title: 'Calendário', description: 'Todos os prazos de tarefas e eventos da organização, em uma visão de calendário.' },
+  { selector: '[data-tour="cal-viewswitch"]', title: 'Trocar visão', description: 'Alterne entre Mês, Semana, Dia ou Agenda (lista cronológica) — a que for mais prática para o momento.' },
+  { selector: '[data-tour="cal-nav"]', title: 'Navegar e filtrar', description: 'Navegue entre períodos, volte para "Hoje" a qualquer momento ou filtre por tipo de evento.' },
+  { selector: '[data-tour="cal-content"]', title: 'Eventos', description: 'Clique em qualquer item para ver os detalhes: cliente, status e prazo.' },
+]
 
 type CalEvent = {
   id: string; title: string; description?: string | null
@@ -38,6 +46,7 @@ function timeStr(d: string) { const dt = new Date(d); return `${String(dt.getHou
 function isSameDay(a: Date, b: Date) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate() }
 
 export default function CalendarioPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('calendario')
   const [events, setEvents] = useState<CalEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<View>('month')
@@ -230,13 +239,17 @@ export default function CalendarioPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><h1 className="text-2xl font-bold tracking-tight">Calendário</h1><p className="text-sm text-muted-foreground">Visualize prazos, tarefas e eventos da organização</p></div>
-        <div className="flex items-center gap-1 rounded-lg border bg-white p-1">
+      <PageTour steps={CALENDARIO_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-tour="cal-header">
+        <div className="flex items-center gap-2">
+          <div><h1 className="text-2xl font-bold tracking-tight">Calendário</h1><p className="text-sm text-muted-foreground">Visualize prazos, tarefas e eventos da organização</p></div>
+          <TourRestartButton onClick={startTour} />
+        </div>
+        <div className="flex items-center gap-1 rounded-lg border bg-white p-1" data-tour="cal-viewswitch">
           {(Object.keys(viewLabels) as View[]).map((v) => (<Button key={v} variant={view === v ? 'secondary' : 'ghost'} size="sm" className="text-xs" onClick={() => setView(v)}>{viewLabels[v]}</Button>))}
         </div>
       </div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-tour="cal-nav">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
           <Button variant="outline" size="sm" onClick={goToday}>Hoje</Button>
@@ -254,7 +267,9 @@ export default function CalendarioPage() {
           <Button variant="ghost" size="sm" onClick={() => setFilterType('all')}><X className="mr-1 h-3 w-3" /> Limpar</Button>
         </CardContent></Card>
       )}
-      {loading ? (<div className="space-y-3"><Skeleton className="h-10 w-full" />{Array.from({ length: 6 }).map((_, i) => (<Skeleton key={i} className="h-24 w-full" />))}</div>) : (<>{view === 'month' && renderMonth()}{view === 'week' && renderWeek()}{view === 'day' && renderDay()}{view === 'agenda' && renderAgenda()}</>)}
+      <div data-tour="cal-content">
+        {loading ? (<div className="space-y-3"><Skeleton className="h-10 w-full" />{Array.from({ length: 6 }).map((_, i) => (<Skeleton key={i} className="h-24 w-full" />))}</div>) : (<>{view === 'month' && renderMonth()}{view === 'week' && renderWeek()}{view === 'day' && renderDay()}{view === 'agenda' && renderAgenda()}</>)}
+      </div>
       <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
         <DialogContent className="sm:max-w-md">{selectedEvent && (<>
           <DialogHeader><DialogTitle className="flex items-center gap-2"><div className="h-3 w-3 rounded-full" style={{ backgroundColor: selectedEvent.color || TYPE_COLORS[selectedEvent.type] || '#6b7280' }} />{selectedEvent.title}</DialogTitle><DialogDescription>{TYPE_LABELS[selectedEvent.type] || selectedEvent.type}</DialogDescription></DialogHeader>

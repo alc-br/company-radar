@@ -19,6 +19,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const DOCUMENTOS_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="doc-header"]', title: 'Documentos', description: 'Central de todos os documentos trocados com os clientes: recebidos, aprovados, rejeitados e solicitados.' },
+  { selector: '[data-tour="doc-actions"]', title: 'Enviar ou solicitar', description: '"Solicitar Documento" pede que o cliente envie algo pelo portal dele; "Upload" é para você mesmo anexar um arquivo.' },
+  { selector: '[data-tour="doc-search"]', title: 'Buscar e filtrar', description: 'Filtre por cliente, tipo de documento ou situação para encontrar rapidamente o que precisa.' },
+  { selector: '[data-tour="doc-table"]', title: 'Lista de documentos', description: 'Aprove, rejeite (com motivo) ou baixe cada documento diretamente por aqui.' },
+]
 
 function formatDate(d?: string | null) {
   if (!d) return '—'
@@ -46,6 +54,7 @@ type Client = { id: string; name: string }
 type DocType = { id: string; name: string }
 
 export default function DocumentosPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('documentos')
   const [documents, setDocuments] = useState<Document[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [docTypes, setDocTypes] = useState<DocType[]>([])
@@ -200,12 +209,16 @@ export default function DocumentosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Documentos</h1>
-          <p className="text-sm text-muted-foreground">Gerencie todos os documentos da organização</p>
+      <PageTour steps={DOCUMENTOS_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-tour="doc-header">
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Documentos</h1>
+            <p className="text-sm text-muted-foreground">Gerencie todos os documentos da organização</p>
+          </div>
+          <TourRestartButton onClick={startTour} />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap" data-tour="doc-actions">
           <Button variant="outline" size="sm" onClick={handleExport}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
           <Button variant="outline" size="sm" asChild>
             <Link href="/app/documentos/solicitar"><Send className="mr-2 h-4 w-4" /> Solicitar Documento</Link>
@@ -214,7 +227,7 @@ export default function DocumentosPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center" data-tour="doc-search">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Buscar documentos..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -264,7 +277,7 @@ export default function DocumentosPage() {
         </Card>
       )}
 
-      <div className="rounded-lg border bg-white">
+      <div className="rounded-lg border bg-white" data-tour="doc-table">
         {loading ? (
           <div className="space-y-3 p-6">{Array.from({ length: 5 }).map((_, i) => (<Skeleton key={i} className="h-12 w-full" />))}</div>
         ) : filtered.length === 0 ? (
