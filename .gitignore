@@ -6,3 +6,4 @@ tool-results/
 *.db
 .env
 actions-runner/
+tsconfig.tsbuildinfo
