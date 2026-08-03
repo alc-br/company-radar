@@ -27,7 +27,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [session] = useState<PortalSession | null>(() => getPortalSession())
+  // Ler direto a cada render (nao useState com inicializador preguicoso): login
+  // e as telas autenticadas compartilham este mesmo layout, entao a instancia
+  // sobrevive ao router.push apos o login — um useState travaria no valor nulo
+  // capturado na primeira montagem (em /portal/login, antes do localStorage
+  // ser escrito) e nunca veria a sessao recem-criada, jogando de volta pro login.
+  const session = getPortalSession()
   const isLoginPage = pathname === '/portal/login'
 
   useEffect(() => {
