@@ -118,7 +118,7 @@ export default function SolicitarDocumentoPage() {
               <Select value={form.clientId} onValueChange={(v) => setForm({ ...form, clientId: v })}>
                 <SelectTrigger id="client"><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
                 <SelectContent>
-                  {clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                  {clients.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
