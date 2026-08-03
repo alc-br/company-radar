@@ -85,6 +85,7 @@ interface ClientRow {
   pendingTasks: number
   count: { tasks: number; documents: number }
   applications: Array<{ id: string; status: string }>
+  nextDueDate: string | null
   createdAt: string
   updatedAt: string
 }
@@ -138,8 +139,9 @@ function getStatusBadge(status: string) {
 }
 
 function getNextDate(client: ClientRow): string | null {
-  // placeholder — will be computed server-side ideally
-  return null
+  if (!client.nextDueDate) return null
+  const d = new Date(client.nextDueDate)
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
 
 // ── Page ───────────────────────────────────────────────────
