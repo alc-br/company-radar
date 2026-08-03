@@ -135,7 +135,7 @@ interface TaskDetail {
   reviewerId: string | null
   departmentId: string | null
   clientId: string
-  recurrenceRule: string | null
+  recurrenceRule: Record<string, unknown> | null
   recurrenceParentId: string | null
   parentTaskId: string | null
   portalVisible: boolean
@@ -942,16 +942,16 @@ export default function TaskDetailPage() {
                   <CardTitle className="text-base">Ocorrências Recorrentes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {!task.recurrenceRule && !task.recurrenceParentId && (
+                  {(!task.recurrenceRule || Object.keys(task.recurrenceRule).length === 0) && !task.recurrenceParentId && (
                     <p className="text-sm text-muted-foreground text-center py-6">
                       Esta tarefa não é recorrente.
                     </p>
                   )}
-                  {task.recurrenceRule && (
+                  {task.recurrenceRule && Object.keys(task.recurrenceRule).length > 0 && (
                     <div className="rounded-lg border p-4 space-y-2">
                       <p className="text-sm font-medium">Regra de Recorrência</p>
                       <pre className="text-xs text-muted-foreground bg-muted/50 rounded p-3 overflow-x-auto">
-                        {JSON.stringify(JSON.parse(task.recurrenceRule), null, 2)}
+                        {JSON.stringify(task.recurrenceRule, null, 2)}
                       </pre>
                     </div>
                   )}

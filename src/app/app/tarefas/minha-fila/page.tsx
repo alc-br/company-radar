@@ -129,8 +129,13 @@ export default function MinhaFilaPage() {
   const fetchTasks = useCallback(async () => {
     setLoading(true)
     try {
+      // Nao mandar 'assignedTo' aqui: o backend so aplica o filtro real de
+      // myQueue (assigned_to_id = usuario logado) quando assignedTo esta
+      // ausente — mandar os dois fazia o backend filtrar pelo campo de nome
+      // livre (assigned_to) com o e-mail da sessao, que nunca bate com nada,
+      // e a fila pessoal ficava sempre vazia mesmo com tarefas de verdade
+      // atribuidas ao usuario.
       const params = new URLSearchParams()
-      params.set('assignedTo', session?.name || '')
       params.set('statuses', 'a_fazer,em_andamento,aguardando_cliente,aguardando_terceiro')
       params.set('myQueue', 'true')
       const res = await fetch(`/api/tasks?${params.toString()}`)
