@@ -80,6 +80,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Calendar as CalendarPicker } from '@/components/ui/calendar'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const TAREFAS_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="tar-header"]', title: 'Tarefas', description: 'Todas as tarefas da organização, geradas manualmente ou automaticamente por templates aplicados.' },
+  { selector: '[data-tour="tar-actions"]', title: 'Ações rápidas', description: '"Minha Fila" mostra só as suas tarefas atribuídas; exporte a lista ou crie uma tarefa avulsa.' },
+  { selector: '[data-tour="tar-viewmode"]', title: 'Formas de visualizar', description: 'Alterne entre tabela, quadro Kanban (arraste para mudar o status) ou agrupamento por cliente/departamento.' },
+  { selector: '[data-tour="tar-content"]', title: 'Suas tarefas', description: 'Clique em qualquer tarefa para ver detalhes, alterar status, adicionar comentários e anexos.' },
+]
 
 // ── Types ──────────────────────────────────────────────────
 type Session = {
@@ -175,6 +183,7 @@ function getChecklistProgress(checklist: Array<{ done: boolean }>): number {
 export default function TarefasPage() {
   const router = useRouter()
   const session = getSession()
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('tarefas')
 
   // Data
   const [tasks, setTasks] = useState<TaskRow[]>([])
@@ -713,13 +722,17 @@ export default function TarefasPage() {
 
   return (
     <div className="space-y-4">
+      <PageTour steps={TAREFAS_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tarefas</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Gerencie e acompanhe todas as tarefas da sua organização</p>
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3" data-tour="tar-header">
         <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Tarefas</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Gerencie e acompanhe todas as tarefas da sua organização</p>
+          </div>
+          <TourRestartButton onClick={startTour} />
+        </div>
+        <div className="flex items-center gap-2" data-tour="tar-actions">
           <Link href="/app/tarefas/minha-fila">
             <Button variant="outline" size="sm" className="text-sm">
               Minha Fila
@@ -747,7 +760,7 @@ export default function TarefasPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'tabela' | 'quadro' | 'agrupamento')}>
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'tabela' | 'quadro' | 'agrupamento')} data-tour="tar-viewmode">
           <TabsList className="h-9">
             <TabsTrigger value="tabela" className="text-xs px-3">
               <Table2 className="h-3.5 w-3.5 mr-1.5" /> Tabela
@@ -931,9 +944,11 @@ export default function TarefasPage() {
       )}
 
       {/* View Content */}
-      {viewMode === 'tabela' && renderTable()}
-      {viewMode === 'quadro' && renderKanban()}
-      {viewMode === 'agrupamento' && renderGrouped()}
+      <div data-tour="tar-content">
+        {viewMode === 'tabela' && renderTable()}
+        {viewMode === 'quadro' && renderKanban()}
+        {viewMode === 'agrupamento' && renderGrouped()}
+      </div>
 
       {/* Bulk Dialogs */}
       <Dialog open={bulkDialog === 'responsavel'} onOpenChange={() => setBulkDialog(null)}>
