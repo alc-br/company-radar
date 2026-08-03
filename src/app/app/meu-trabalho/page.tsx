@@ -244,14 +244,11 @@ export default function MeuTrabalhoPage() {
   const [activeTab, setActiveTab] = useState('hoje')
   const [completing, setCompleting] = useState<string | null>(null)
 
-  const session = getSession()
-  const userName = session.name || ''
-
   const fetchTasks = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (userName) params.set('assignedTo', userName)
+      params.set('myQueue', 'true')
       params.set('limit', '200')
       params.set('parentId', '')
 
@@ -264,7 +261,7 @@ export default function MeuTrabalhoPage() {
     } finally {
       setLoading(false)
     }
-  }, [userName])
+  }, [])
 
   useEffect(() => {
     fetchTasks()
