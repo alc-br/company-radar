@@ -89,7 +89,11 @@ interface OrgMember {
 
 // ── Helpers ────────────────────────────────────────────────
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr)
+  // dateStr e uma data pura (YYYY-MM-DD, sem hora/offset) vinda de <input type=date>.
+  // new Date(dateStr) direto interpreta como UTC meia-noite; convertido de volta
+  // para o fuso local (ex.: America/Sao_Paulo, UTC-3) isso volta um dia (mostrava
+  // 02/08 para uma data-base digitada como 03/08). Ancorar em meia-noite local evita isso.
+  const d = new Date(`${dateStr}T00:00:00`)
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
 
