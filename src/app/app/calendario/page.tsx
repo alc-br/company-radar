@@ -24,6 +24,11 @@ type CalEvent = {
 const TYPE_COLORS: Record<string, string> = { task: '#f97316', deadline: '#ef4444', meeting: '#8b5cf6', holiday: '#22c55e' }
 const TYPE_LABELS: Record<string, string> = { task: 'Tarefa', deadline: 'Prazo', meeting: 'Reunião', holiday: 'Feriado' }
 const TYPE_ICONS: Record<string, React.ElementType> = { task: Clock, deadline: CheckCircle2, meeting: Users, holiday: PartyPopper }
+const STATUS_LABELS: Record<string, string> = {
+  a_fazer: 'A Fazer', em_andamento: 'Em Andamento', concluida: 'Concluída',
+  aguardando_cliente: 'Aguardando Cliente', aguardando_terceiro: 'Aguardando Terceiro',
+  bloqueada: 'Bloqueada', cancelada: 'Cancelada',
+}
 const DAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 type View = 'month' | 'week' | 'day' | 'agenda'
@@ -235,7 +240,7 @@ export default function CalendarioPage() {
             {selectedEvent.description && <p className="text-sm text-muted-foreground">{selectedEvent.description}</p>}
             <div className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" />{fmt(new Date(selectedEvent.startDate))}{!selectedEvent.allDay && <span>· {timeStr(selectedEvent.startDate)}</span>}</div>
             {selectedEvent.clientName && <div className="flex items-center gap-2 text-sm"><Building2 className="h-4 w-4 text-muted-foreground" />{selectedEvent.clientName}</div>}
-            {selectedEvent.status && <Badge variant="outline">{selectedEvent.status}</Badge>}
+            {selectedEvent.status && <Badge variant="outline">{STATUS_LABELS[selectedEvent.status] || selectedEvent.status}</Badge>}
           </div>
         </>)}</DialogContent>
       </Dialog>
