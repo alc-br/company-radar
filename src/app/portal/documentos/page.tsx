@@ -10,6 +10,14 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const PORTAL_DOC_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="pdoc-header"]', title: 'Documentos', description: 'Envie documentos ao seu escritório de contabilidade ou acompanhe os que já enviou.' },
+  { selector: '[data-tour="pdoc-upload"]', title: 'Enviar um documento', description: 'Use este botão para enviar qualquer arquivo, mesmo sem uma solicitação prévia.' },
+  { selector: '[data-tour="pdoc-tabs"]', title: 'Documentos e Solicitações', description: '"Meus Documentos" mostra o que você já enviou; "Solicitações" mostra o que o escritório está pedindo.' },
+  { selector: '[data-tour="pdoc-content"]', title: 'Lista', description: 'Acompanhe a situação de cada documento ou envie o que foi solicitado.' },
+]
 
 type PortalDoc = { id: string; name: string; status: string; updatedAt: string; documentType?: { name: string } }
 type PortalDocReq = { id: string; title: string; status: string; dueDate: string | null; acceptedFormats: string }
@@ -26,6 +34,7 @@ const statusMap: Record<string, { label: string; color: string }> = {
 }
 
 export default function PortalDocumentosPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('portal-documentos')
   const [docs, setDocs] = useState<PortalDoc[]>([])
   const [requests, setRequests] = useState<PortalDocReq[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,13 +75,21 @@ export default function PortalDocumentosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between"><div><h1 className="text-2xl font-bold tracking-tight">Documentos</h1><p className="text-sm text-muted-foreground">Gerencie seus documentos</p></div><Button size="sm" onClick={() => handleUpload()}><Upload className="mr-2 h-4 w-4" /> Upload</Button></div>
+      <PageTour steps={PORTAL_DOC_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center justify-between" data-tour="pdoc-header">
+        <div className="flex items-center gap-2">
+          <div><h1 className="text-2xl font-bold tracking-tight">Documentos</h1><p className="text-sm text-muted-foreground">Gerencie seus documentos</p></div>
+          <TourRestartButton onClick={startTour} />
+        </div>
+        <Button size="sm" onClick={() => handleUpload()} data-tour="pdoc-upload"><Upload className="mr-2 h-4 w-4" /> Upload</Button>
+      </div>
 
-      <div className="flex gap-2 rounded-lg border bg-white p-1 w-fit">
+      <div className="flex gap-2 rounded-lg border bg-white p-1 w-fit" data-tour="pdoc-tabs">
         <Button variant={tab === 'documentos' ? 'secondary' : 'ghost'} size="sm" className="text-xs" onClick={() => setTab('documentos')}>Meus Documentos</Button>
         <Button variant={tab === 'solicitacoes' ? 'secondary' : 'ghost'} size="sm" className="text-xs" onClick={() => setTab('solicitacoes')}>Solicitações</Button>
       </div>
 
+      <div data-tour="pdoc-content">
       {loading ? (<div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => (<Skeleton key={i} className="h-16 w-full" />))}</div>) : tab === 'documentos' ? (
         <div className="rounded-lg border bg-white">{docs.length === 0 ? (<div className="flex flex-col items-center justify-center py-16 text-center"><FileText className="h-12 w-12 text-muted-foreground/40 mb-4" /><h3 className="text-sm font-medium">Nenhum documento</h3></div>) : (
           <Table><TableHeader><TableRow><TableHead>Documento</TableHead><TableHead>Tipo</TableHead><TableHead>Situação</TableHead><TableHead>Atualização</TableHead><TableHead className="w-[50px]"></TableHead></TableRow></TableHeader><TableBody>
@@ -86,6 +103,7 @@ export default function PortalDocumentosPage() {
           </TableBody></Table>
         )}</div>
       )}
+      </div>
     </div>
   )
 }

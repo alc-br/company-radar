@@ -10,6 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const PORTAL_HOME_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="ph-header"]', title: 'Bem-vindo ao Portal', description: 'Aqui você acompanha tudo o que seu escritório de contabilidade precisa de você: pendências, documentos e prazos.' },
+  { selector: '[data-tour="ph-cards"]', title: 'Resumo rápido', description: 'Cada cartão mostra um resumo e leva direto para a tela completa — clique para ver mais detalhes ou enviar algo.' },
+]
 
 function getPortalSession() {
   if (typeof window === 'undefined') return null
@@ -17,6 +23,7 @@ function getPortalSession() {
 }
 
 export default function PortalHomePage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('portal-home')
   const [tasks, setTasks] = useState<Array<{ id: string; title: string; dueDate: string; status: string; clientName: string }>>([])
   const [docRequests, setDocRequests] = useState<Array<{ id: string; title: string; dueDate: string; status: string }>>([])
   const [deadlines, setDeadlines] = useState<Array<{ id: string; title: string; dueDate: string }>>([])
@@ -42,12 +49,16 @@ export default function PortalHomePage() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Bem-vindo ao Portal</h1><p className="text-sm text-muted-foreground">Acompanhe suas pendências e documentos</p></div>
+      <PageTour steps={PORTAL_HOME_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center gap-2" data-tour="ph-header">
+        <div><h1 className="text-2xl font-bold tracking-tight">Bem-vindo ao Portal</h1><p className="text-sm text-muted-foreground">Acompanhe suas pendências e documentos</p></div>
+        <TourRestartButton onClick={startTour} />
+      </div>
 
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-40" />))}</div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-tour="ph-cards">
           <Link href="/portal/pendencias">
             <Card className="group hover:shadow-md transition-shadow cursor-pointer h-full">
               <CardHeader className="pb-2"><div className="flex items-center justify-between"><CardTitle className="text-base">Pendências</CardTitle><Clock className="h-5 w-5 text-amber-500" /></div></CardHeader>

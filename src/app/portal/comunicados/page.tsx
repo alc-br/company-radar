@@ -6,6 +6,11 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const COMUNICADOS_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="pcm-header"]', title: 'Comunicados', description: 'Avisos e informes publicados pelo seu escritório de contabilidade aparecem aqui.' },
+]
 
 type Announcement = {
   id: string
@@ -30,6 +35,7 @@ function getPortalSession() {
 }
 
 export default function ComunicadosPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('portal-comunicados')
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -78,9 +84,13 @@ export default function ComunicadosPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Comunicados</h1>
-        <p className="text-sm text-muted-foreground">Avisos e informes do seu escritório</p>
+      <PageTour steps={COMUNICADOS_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center gap-2" data-tour="pcm-header">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Comunicados</h1>
+          <p className="text-sm text-muted-foreground">Avisos e informes do seu escritório</p>
+        </div>
+        <TourRestartButton onClick={startTour} />
       </div>
 
       {loading ? (

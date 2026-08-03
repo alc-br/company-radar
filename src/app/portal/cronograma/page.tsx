@@ -8,6 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const CRONOGRAMA_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="pcr-header"]', title: 'Cronograma', description: 'Prazos e eventos relevantes vindos do seu escritório de contabilidade.' },
+  { selector: '[data-tour="pcr-nav"]', title: 'Navegar', description: 'Mude de mês ou volte para "Hoje" a qualquer momento.' },
+  { selector: '[data-tour="pcr-calendar"]', title: 'Calendário', description: 'Clique em qualquer evento para ver mais detalhes.' },
+]
 
 type CalEvent = { id: string; title: string; description?: string | null; startDate: string; endDate?: string | null; allDay?: boolean; color?: string | null; type: string; clientName?: string }
 
@@ -19,6 +26,7 @@ const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', '
 function isSameDay(a: Date, b: Date) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate() }
 
 export default function PortalCronogramaPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('portal-cronograma')
   const [events, setEvents] = useState<CalEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -79,14 +87,20 @@ export default function PortalCronogramaPage() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Cronograma</h1><p className="text-sm text-muted-foreground">Prazos e eventos relevantes</p></div>
-      <div className="flex items-center gap-2">
+      <PageTour steps={CRONOGRAMA_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center gap-2" data-tour="pcr-header">
+        <div><h1 className="text-2xl font-bold tracking-tight">Cronograma</h1><p className="text-sm text-muted-foreground">Prazos e eventos relevantes</p></div>
+        <TourRestartButton onClick={startTour} />
+      </div>
+      <div className="flex items-center gap-2" data-tour="pcr-nav">
         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
         <Button variant="outline" size="sm" onClick={goToday}>Hoje</Button>
         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navigate(1)}><ChevronRight className="h-4 w-4" /></Button>
         <h2 className="text-lg font-semibold">{MONTHS_PT[month]} {year}</h2>
       </div>
-      {loading ? (<div className="space-y-3"><Skeleton className="h-10 w-full" />{Array.from({ length: 6 }).map((_, i) => (<Skeleton key={i} className="h-20 w-full" />))}</div>) : renderMonth()}
+      <div data-tour="pcr-calendar">
+        {loading ? (<div className="space-y-3"><Skeleton className="h-10 w-full" />{Array.from({ length: 6 }).map((_, i) => (<Skeleton key={i} className="h-20 w-full" />))}</div>) : renderMonth()}
+      </div>
       <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}><DialogContent className="sm:max-w-md">{selectedEvent && (<>
         <DialogHeader><DialogTitle>{selectedEvent.title}</DialogTitle><DialogDescription>{TYPE_LABELS[selectedEvent.type] || selectedEvent.type}</DialogDescription></DialogHeader>
         <div className="space-y-2">

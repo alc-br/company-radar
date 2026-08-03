@@ -15,6 +15,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const PENDENCIAS_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="pend-header"]', title: 'Pendências', description: 'Tarefas que precisam da sua atenção — enviadas pelo seu escritório de contabilidade.' },
+  { selector: '[data-tour="pend-list"]', title: 'Suas tarefas', description: 'Clique em qualquer item para ver instruções detalhadas e o prazo.' },
+]
 
 type PortalTask = {
   id: string; title: string; description: string | null; status: string
@@ -31,6 +37,7 @@ function formatDate(d?: string | null) {
 const PRIORITY_LABELS: Record<string, string> = { low: 'Baixa', medium: 'Média', high: 'Alta', urgent: 'Urgente' }
 
 export default function PendenciasPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('portal-pendencias')
   const [tasks, setTasks] = useState<PortalTask[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTask, setSelectedTask] = useState<PortalTask | null>(null)
@@ -94,8 +101,13 @@ export default function PendenciasPage() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Pendências</h1><p className="text-sm text-muted-foreground">Ações que precisam da sua atenção</p></div>
+      <PageTour steps={PENDENCIAS_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center gap-2" data-tour="pend-header">
+        <div><h1 className="text-2xl font-bold tracking-tight">Pendências</h1><p className="text-sm text-muted-foreground">Ações que precisam da sua atenção</p></div>
+        <TourRestartButton onClick={startTour} />
+      </div>
 
+      <div data-tour="pend-list">
       {loading ? (<div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => (<Skeleton key={i} className="h-20 w-full" />))}</div>) : pending.length === 0 && done.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center"><CheckCircle2 className="h-12 w-12 text-muted-foreground/40 mb-4" /><h3 className="text-sm font-medium">Nenhuma pendência</h3><p className="text-sm text-muted-foreground mt-1">Tudo em dia!</p></div>
       ) : (
@@ -124,6 +136,7 @@ export default function PendenciasPage() {
           ))}</div></div>)}
         </div>
       )}
+      </div>
 
       {/* Task Detail Dialog */}
       <Dialog open={!!selectedTask} onOpenChange={() => setSelectedTask(null)}><DialogContent className="sm:max-w-lg">{selectedTask && (<>

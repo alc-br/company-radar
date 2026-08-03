@@ -7,8 +7,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const PERFIL_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="pperf-header"]', title: 'Perfil', description: 'Mantenha seus dados de contato atualizados e altere sua senha de acesso ao portal.' },
+  { selector: '[data-tour="pperf-info"]', title: 'Seus dados', description: 'O e-mail não pode ser alterado por aqui — fale com o escritório se precisar trocá-lo.' },
+]
 
 export default function PortalPerfilPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('portal-perfil')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
@@ -67,9 +74,13 @@ export default function PortalPerfilPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div><h1 className="text-2xl font-bold tracking-tight">Perfil</h1><p className="text-sm text-muted-foreground">Gerencie suas informações de contato</p></div>
+      <PageTour steps={PERFIL_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center gap-2" data-tour="pperf-header">
+        <div><h1 className="text-2xl font-bold tracking-tight">Perfil</h1><p className="text-sm text-muted-foreground">Gerencie suas informações de contato</p></div>
+        <TourRestartButton onClick={startTour} />
+      </div>
 
-      <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><UserCircle className="h-4 w-4" /> Informações de Contato</CardTitle></CardHeader><CardContent className="space-y-4">
+      <Card data-tour="pperf-info"><CardHeader><CardTitle className="text-base flex items-center gap-2"><UserCircle className="h-4 w-4" /> Informações de Contato</CardTitle></CardHeader><CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2"><Label>Nome</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div className="grid gap-2"><Label>E-mail</Label><Input type="email" value={form.email} disabled className="opacity-60" /></div>
