@@ -14,6 +14,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card } from '@/components/ui/card'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const NOTIFICACOES_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="not-header"]', title: 'Notificações', description: 'Avisos do sistema sobre tarefas, prazos, documentos e atividade da equipe.' },
+  { selector: '[data-tour="not-actions"]', title: 'Filtrar e marcar como lidas', description: 'Filtre por tipo de notificação ou marque todas como lidas de uma vez.' },
+  { selector: '[data-tour="not-list"]', title: 'Sua lista', description: 'Clique em uma notificação para ir direto ao item relacionado (tarefa, documento, etc.).' },
+]
 
 type Notification = {
   id: string; title: string; message: string; type: string
@@ -54,6 +61,7 @@ function timeAgo(date: string): string {
 
 export default function NotificacoesPage() {
   const router = useRouter()
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('notificacoes')
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState('all')
@@ -98,14 +106,18 @@ export default function NotificacoesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Notificações</h1>
-          <p className="text-sm text-muted-foreground">
-            {unreadCount > 0 ? `${unreadCount} não lida${unreadCount > 1 ? 's' : ''}` : 'Todas as notificações foram lidas'}
-          </p>
-        </div>
+      <PageTour steps={NOTIFICACOES_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-tour="not-header">
         <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Notificações</h1>
+            <p className="text-sm text-muted-foreground">
+              {unreadCount > 0 ? `${unreadCount} não lida${unreadCount > 1 ? 's' : ''}` : 'Todas as notificações foram lidas'}
+            </p>
+          </div>
+          <TourRestartButton onClick={startTour} />
+        </div>
+        <div className="flex items-center gap-2" data-tour="not-actions">
           <Select value={filterType} onValueChange={setFilterType}>
             <SelectTrigger className="h-9 w-[140px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
             <SelectContent>{Object.entries(TYPE_LABELS).map(([k, v]) => (<SelectItem key={k} value={k}>{v}</SelectItem>))}</SelectContent>
@@ -118,7 +130,7 @@ export default function NotificacoesPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-white">
+      <div className="rounded-lg border bg-white" data-tour="not-list">
         {loading ? (
           <div className="space-y-3 p-6">{Array.from({ length: 6 }).map((_, i) => (<div key={i} className="flex gap-3"><Skeleton className="h-10 w-10 rounded-full shrink-0" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div></div>))}</div>
         ) : filtered.length === 0 ? (

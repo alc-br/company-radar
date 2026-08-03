@@ -20,6 +20,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const CONFIG_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="cfg-header"]', title: 'Configurações', description: 'Ajustes gerais da organização: dados cadastrais, campos personalizados, alertas, segurança, auditoria e privacidade.' },
+  { selector: '[data-tour="cfg-tabs"]', title: 'Categorias de configuração', description: 'Cada aba cobre uma área diferente — explore quando precisar ajustar algo específico.' },
+]
 
 type OrgSettings = { name: string; tradeName: string; cnpj: string; email: string; phone: string; logo: string | null; timezone: string; primaryColor: string; settings: Record<string, unknown> }
 type AuditLog = { id: string; userName: string | null; action: string; entity: string | null; entityId: string | null; detail: string | null; ip: string | null; createdAt: string }
@@ -36,6 +42,7 @@ const DEFAULT_ALERTS = [
 const TIMEZONES = ['America/Sao_Paulo', 'America/Manaus', 'America/Belem', 'America/Fortaleza', 'America/Recife', 'America/Cuiaba', 'America/Porto_Velho', 'America/Rio_Branco', 'America/Campo_Grande']
 
 export default function ConfiguracoesPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('configuracoes')
   const [tab, setTab] = useState('organizacao')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -206,10 +213,14 @@ export default function ConfiguracoesPage() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Configurações</h1><p className="text-sm text-muted-foreground">Gerencie as configurações da organização</p></div>
+      <PageTour steps={CONFIG_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center gap-2" data-tour="cfg-header">
+        <div><h1 className="text-2xl font-bold tracking-tight">Configurações</h1><p className="text-sm text-muted-foreground">Gerencie as configurações da organização</p></div>
+        <TourRestartButton onClick={startTour} />
+      </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex-wrap h-auto gap-1"><TabsTrigger value="organizacao">Organização</TabsTrigger><TabsTrigger value="campos">Campos e Classificações</TabsTrigger><TabsTrigger value="alertas">Alertas</TabsTrigger><TabsTrigger value="seguranca">Segurança</TabsTrigger><TabsTrigger value="auditoria">Auditoria</TabsTrigger><TabsTrigger value="privacidade">Dados e Privacidade</TabsTrigger></TabsList>
+        <TabsList className="flex-wrap h-auto gap-1" data-tour="cfg-tabs"><TabsTrigger value="organizacao">Organização</TabsTrigger><TabsTrigger value="campos">Campos e Classificações</TabsTrigger><TabsTrigger value="alertas">Alertas</TabsTrigger><TabsTrigger value="seguranca">Segurança</TabsTrigger><TabsTrigger value="auditoria">Auditoria</TabsTrigger><TabsTrigger value="privacidade">Dados e Privacidade</TabsTrigger></TabsList>
 
         {/* Organização */}
         <TabsContent value="organizacao" className="mt-4 space-y-4 max-w-2xl">

@@ -12,6 +12,13 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const ASSINATURA_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="ass-header"]', title: 'Assinatura', description: 'Acompanhe seu plano atual, uso de recursos e faturas.' },
+  { selector: '[data-tour="ass-plan"]', title: 'Seu plano', description: 'Veja quanto você já usou de clientes, usuários e armazenamento em relação ao limite do plano.' },
+  { selector: '[data-tour="ass-actions"]', title: 'Gerenciar', description: 'Troque de plano, veja as faturas ou cancele a assinatura por aqui.' },
+]
 
 function formatDate(d?: string | null) {
   if (!d) return '—'
@@ -36,6 +43,7 @@ type SubInfo = {
 type Invoice = { id: number; date: string; amount: number; status: string }
 
 export default function AssinaturaPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('assinatura')
   const [sub, setSub] = useState<SubInfo | null>(null)
   const [plans, setPlans] = useState<PlanInfo[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -107,13 +115,17 @@ export default function AssinaturaPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div><h1 className="text-2xl font-bold tracking-tight">Assinatura</h1><p className="text-sm text-muted-foreground">Gerencie seu plano e faturas</p></div>
+      <PageTour steps={ASSINATURA_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center gap-2" data-tour="ass-header">
+        <div><h1 className="text-2xl font-bold tracking-tight">Assinatura</h1><p className="text-sm text-muted-foreground">Gerencie seu plano e faturas</p></div>
+        <TourRestartButton onClick={startTour} />
+      </div>
 
       {loading ? (
         <div className="space-y-4"><Skeleton className="h-48 w-full" /><Skeleton className="h-32 w-full" /></div>
       ) : sub && plan ? (
         <>
-          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent" data-tour="ass-plan">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -151,7 +163,7 @@ export default function AssinaturaPage() {
               </div>
               <div className="flex items-end justify-between">
                 <div><p className="text-xs text-muted-foreground">Valor mensal</p><p className="text-2xl font-bold">{fmtCurrency(price)}<span className="text-sm font-normal text-muted-foreground">/mês</span></p></div>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap" data-tour="ass-actions">
                   <Button variant="outline" size="sm" onClick={() => setPlanDialog(true)}><ArrowLeftRight className="mr-2 h-4 w-4" /> Alterar Plano</Button>
                   <Button variant="outline" size="sm" onClick={() => setShowInvoices(!showInvoices)}><Download className="mr-2 h-4 w-4" /> Faturas</Button>
                   <Button variant="outline" size="sm" onClick={() => toast.info('Gerenciamento de pagamento disponível em breve.')}><Settings className="mr-2 h-4 w-4" /> Pagamento</Button>

@@ -19,6 +19,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const EQUIPE_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="eq-header"]', title: 'Equipe', description: 'Gerencie quem trabalha no escritório, os departamentos e os convites pendentes.' },
+  { selector: '[data-tour="eq-tabs"]', title: 'Membros, Departamentos e Convites', description: 'Alterne entre a lista de membros ativos, os departamentos cadastrados e os convites enviados.' },
+  { selector: '[data-tour="eq-invite"]', title: 'Convidar', description: 'Envie um convite por e-mail para um novo membro se juntar à equipe.' },
+]
 
 function formatDate(d?: string | null) {
   if (!d) return '—'
@@ -56,6 +63,7 @@ type Member = {
 type Department = { id: string; name: string; description: string | null; color: string; managerId: string | null; _count?: { members: number; templates: number } }
 
 export default function EquipePage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('equipe')
   const [members, setMembers] = useState<Member[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)
@@ -185,7 +193,7 @@ export default function EquipePage() {
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Buscar membros..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-          <Button size="sm" onClick={() => setInviteOpen(true)}><UserPlus className="mr-2 h-4 w-4" /> Convidar</Button>
+          <Button size="sm" onClick={() => setInviteOpen(true)} data-tour="eq-invite"><UserPlus className="mr-2 h-4 w-4" /> Convidar</Button>
         </div>
         <div className="rounded-lg border bg-white">
           {loading ? (<div className="space-y-3 p-6">{Array.from({ length: 5 }).map((_, i) => (<Skeleton key={i} className="h-12 w-full" />))}</div>) : filteredActive.length === 0 ? (
@@ -235,10 +243,14 @@ export default function EquipePage() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Equipe</h1><p className="text-sm text-muted-foreground">Gerencie membros, departamentos e convites</p></div>
+      <PageTour steps={EQUIPE_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center gap-2" data-tour="eq-header">
+        <div><h1 className="text-2xl font-bold tracking-tight">Equipe</h1><p className="text-sm text-muted-foreground">Gerencie membros, departamentos e convites</p></div>
+        <TourRestartButton onClick={startTour} />
+      </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList><TabsTrigger value="membros">Membros{activeMembers.length > 0 && <Badge variant="secondary" className="ml-2 h-5 min-w-5 text-[10px]">{activeMembers.length}</Badge>}</TabsTrigger><TabsTrigger value="departamentos">Departamentos{departments.length > 0 && <Badge variant="secondary" className="ml-2 h-5 min-w-5 text-[10px]">{departments.length}</Badge>}</TabsTrigger><TabsTrigger value="convites">Convites{invitedMembers.length > 0 && <Badge variant="secondary" className="ml-2 h-5 min-w-5 text-[10px]">{invitedMembers.length}</Badge>}</TabsTrigger></TabsList>
+        <TabsList data-tour="eq-tabs"><TabsTrigger value="membros">Membros{activeMembers.length > 0 && <Badge variant="secondary" className="ml-2 h-5 min-w-5 text-[10px]">{activeMembers.length}</Badge>}</TabsTrigger><TabsTrigger value="departamentos">Departamentos{departments.length > 0 && <Badge variant="secondary" className="ml-2 h-5 min-w-5 text-[10px]">{departments.length}</Badge>}</TabsTrigger><TabsTrigger value="convites">Convites{invitedMembers.length > 0 && <Badge variant="secondary" className="ml-2 h-5 min-w-5 text-[10px]">{invitedMembers.length}</Badge>}</TabsTrigger></TabsList>
         <TabsContent value="membros" className="mt-4">{renderMembers()}</TabsContent>
         <TabsContent value="departamentos" className="mt-4">{renderDepartments()}</TabsContent>
         <TabsContent value="convites" className="mt-4">{renderInvites()}</TabsContent>

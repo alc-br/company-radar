@@ -22,6 +22,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const MEUTRABALHO_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="mt-header"]', title: 'Meu Trabalho', description: 'Suas próprias tarefas atribuídas, organizadas por urgência — sua visão pessoal do que fazer.' },
+  { selector: '[data-tour="mt-tabs"]', title: 'Categorias', description: 'Hoje, Atrasadas, Próximas, Aguardando Terceiro e Concluídas — cada aba filtra suas tarefas por essa situação.' },
+]
 
 // ── Types ──────────────────────────────────────────────────
 interface TaskItem {
@@ -239,6 +245,7 @@ function TaskCard({
 
 // ── Main Page ──────────────────────────────────────────────
 export default function MeuTrabalhoPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('meu-trabalho')
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('hoje')
@@ -326,13 +333,17 @@ export default function MeuTrabalhoPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Meu Trabalho</h1>
-        <p className="text-sm text-muted-foreground">Gerencie suas tarefas e acompanhe seus prazos</p>
+      <PageTour steps={MEUTRABALHO_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex items-center gap-2" data-tour="mt-header">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Meu Trabalho</h1>
+          <p className="text-sm text-muted-foreground">Gerencie suas tarefas e acompanhe seus prazos</p>
+        </div>
+        <TourRestartButton onClick={startTour} />
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="h-auto flex-wrap gap-1 bg-transparent p-0">
+        <TabsList className="h-auto flex-wrap gap-1 bg-transparent p-0" data-tour="mt-tabs">
           <TabsTrigger
             value="hoje"
             className="relative rounded-lg border border-border px-3 py-2 text-sm data-[state=active]:bg-[#2563eb] data-[state=active]:text-white data-[state=active]:border-[#2563eb] data-[state=active]:shadow-sm"

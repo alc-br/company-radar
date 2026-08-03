@@ -14,6 +14,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from 'sonner'
+import { PageTour, TourRestartButton, usePageTour, type TourStep } from '@/components/page-tour'
+
+const RELATORIOS_TOUR_STEPS: TourStep[] = [
+  { selector: '[data-tour="rel-header"]', title: 'Relatórios', description: 'Análises detalhadas de produtividade, carteira de clientes, prazos e documentos.' },
+  { selector: '[data-tour="rel-period"]', title: 'Período', description: 'Restrinja qualquer relatório a um intervalo de datas específico.' },
+  { selector: '[data-tour="rel-tabs"]', title: 'Tipos de relatório', description: 'Produtividade (equipe e prazos), Carteira (clientes), Prazos (vencimentos) e Documentos (situação).' },
+]
 
 function fmtNum(v: number) { return new Intl.NumberFormat('pt-BR').format(v) }
 
@@ -34,6 +41,7 @@ function StatCard({ title, value, icon: Icon, trend, trendLabel, color }: {
 }
 
 export default function RelatoriosPage() {
+  const { active: tourActive, start: startTour, finish: finishTour } = usePageTour('relatorios')
   const [tab, setTab] = useState('produtividade')
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState('')
@@ -166,19 +174,23 @@ export default function RelatoriosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><h1 className="text-2xl font-bold tracking-tight">Relatórios</h1><p className="text-sm text-muted-foreground">Análise detalhada da produtividade e carteira</p></div>
+      <PageTour steps={RELATORIOS_TOUR_STEPS} active={tourActive} onFinish={finishTour} />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-tour="rel-header">
+        <div className="flex items-center gap-2">
+          <div><h1 className="text-2xl font-bold tracking-tight">Relatórios</h1><p className="text-sm text-muted-foreground">Análise detalhada da produtividade e carteira</p></div>
+          <TourRestartButton onClick={startTour} />
+        </div>
         <Button variant="outline" size="sm" onClick={handleExport}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
       </div>
 
-      <Card><CardContent className="flex flex-wrap items-end gap-4 p-4">
+      <Card data-tour="rel-period"><CardContent className="flex flex-wrap items-end gap-4 p-4">
         <div className="min-w-[160px]"><Label className="text-xs text-muted-foreground mb-1 block">De</Label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9" /></div>
         <div className="min-w-[160px]"><Label className="text-xs text-muted-foreground mb-1 block">Até</Label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9" /></div>
         <Button variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo('') }}>Limpar</Button>
       </CardContent></Card>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList><TabsTrigger value="produtividade">Produtividade</TabsTrigger><TabsTrigger value="carteira">Carteira</TabsTrigger><TabsTrigger value="prazos">Prazos</TabsTrigger><TabsTrigger value="documentos">Documentos</TabsTrigger></TabsList>
+        <TabsList data-tour="rel-tabs"><TabsTrigger value="produtividade">Produtividade</TabsTrigger><TabsTrigger value="carteira">Carteira</TabsTrigger><TabsTrigger value="prazos">Prazos</TabsTrigger><TabsTrigger value="documentos">Documentos</TabsTrigger></TabsList>
         <TabsContent value="produtividade" className="mt-4">{loading ? <div className="grid gap-4 sm:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => (<Skeleton key={i} className="h-28" />))}</div> : <Produtividade />}</TabsContent>
         <TabsContent value="carteira" className="mt-4">{loading ? <div className="grid gap-4 sm:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-28" />))}</div> : <Carteira />}</TabsContent>
         <TabsContent value="prazos" className="mt-4">{loading ? <div className="grid gap-4 sm:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-28" />))}</div> : <Prazos />}</TabsContent>
