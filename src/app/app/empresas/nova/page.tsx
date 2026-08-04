@@ -206,7 +206,7 @@ export default function NovoClientePage() {
           city: city.trim() || null,
           state: state || null,
           zipCode: stripCEP(zipCode) || null,
-          responsibleId: responsibleId || null,
+          responsible: responsibleId || null,
           notes: notes.trim() || null,
           tags: selectedTags,
         }),

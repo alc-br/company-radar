@@ -182,7 +182,7 @@ export default function EditarClientePage({ params }: { params: Promise<{ id: st
       setCity(data.city || '')
       setState(data.state || '')
       setZipCode(data.zipCode || '')
-      setResponsibleId(data.responsibleId || '')
+      setResponsibleId(data.responsible != null ? String(data.responsible) : '')
       setNotes(data.notes || '')
       setSelectedTags(data.tagsList?.map((t: TagItem) => String(t.id)) || [])
     } catch {
@@ -227,7 +227,7 @@ export default function EditarClientePage({ params }: { params: Promise<{ id: st
           city: city.trim() || null,
           state: state || null,
           zipCode: stripCEP(zipCode) || null,
-          responsibleId: responsibleId || null,
+          responsible: responsibleId || null,
           notes: notes.trim() || null,
           tags: selectedTags,
         }),

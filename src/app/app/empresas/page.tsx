@@ -87,7 +87,7 @@ interface ClientRow {
   cnpj: string
   taxRegime: string | null
   status: string
-  responsibleId: string | null
+  responsible: number | null
   segment: string | null
   tagsList: Array<{ id: string; name: string; color: string }>
   pendingTasks: number
@@ -271,7 +271,7 @@ export default function EmpresasPage() {
           fetch(`/api/clients/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ responsibleId: bulkResponsibleId }),
+            body: JSON.stringify({ responsible: bulkResponsibleId }),
           })
         )
       )
@@ -598,7 +598,7 @@ export default function EmpresasPage() {
                 </TableRow>
               ) : (
                 clients.map(client => {
-                  const responsible = members.find(m => m.id === client.responsibleId)
+                  const responsible = members.find(m => String(m.id) === String(client.responsible))
                   return (
                     <TableRow
                       key={client.id}
