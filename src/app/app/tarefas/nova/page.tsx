@@ -311,7 +311,7 @@ export default function NovaTarefaPage() {
                   <Select
                     value={form.assignedToId}
                     onValueChange={(v) => {
-                      const member = members.find((m) => m.id === v)
+                      const member = members.find((m) => String(m.id) === v)
                       setForm((prev) => ({
                         ...prev,
                         assignedToId: v,

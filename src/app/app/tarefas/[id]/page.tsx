@@ -1141,7 +1141,7 @@ export default function TaskDetailPage() {
             <DialogDescription>Selecione o novo responsável pela tarefa</DialogDescription>
           </DialogHeader>
           <Select value={delegateToId} onValueChange={(v) => {
-            const m = members.find((mem) => mem.id === v)
+            const m = members.find((mem) => String(mem.id) === v)
             setDelegateToId(v)
             setDelegateTo(m?.name || '')
           }}>

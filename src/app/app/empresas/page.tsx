@@ -265,7 +265,7 @@ export default function EmpresasPage() {
     if (!bulkResponsibleId || selectedIds.size === 0) return
     setBulkLoading(true)
     try {
-      const member = members.find(m => m.id === bulkResponsibleId)
+      const member = members.find(m => String(m.id) === bulkResponsibleId)
       await Promise.all(
         Array.from(selectedIds).map(id =>
           fetch(`/api/clients/${id}`, {
@@ -290,7 +290,7 @@ export default function EmpresasPage() {
     if (!bulkTagId || selectedIds.size === 0) return
     setBulkLoading(true)
     try {
-      const tag = tags.find(t => t.id === bulkTagId)
+      const tag = tags.find(t => String(t.id) === bulkTagId)
       await Promise.all(
         Array.from(selectedIds).map(id =>
           fetch(`/api/clients/${id}`, {

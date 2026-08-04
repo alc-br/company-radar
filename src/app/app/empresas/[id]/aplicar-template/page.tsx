@@ -174,8 +174,8 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
   const [submitting, setSubmitting] = useState(false)
 
   // Computed
-  const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
-  const selectedVersion = versions.find(v => v.id === selectedVersionId)
+  const selectedTemplate = templates.find(t => String(t.id) === selectedTemplateId)
+  const selectedVersion = versions.find(v => String(v.id) === selectedVersionId)
   const stages: Stage[] = selectedVersion?.stages || []
   const templateVars: TemplateVariable[] = selectedVersion?.variables || []
 
@@ -581,7 +581,7 @@ export default function AplicarTemplatePage({ params }: { params: Promise<{ id: 
                     <div className="ml-4 space-y-2 border-l-2 border-muted pl-4">
                       {stage.tasks.map((task, ti) => {
                         const assignedMember = task.role
-                          ? members.find(m => m.id === roleMappings[task.role])
+                          ? members.find(m => String(m.id) === roleMappings[task.role])
                           : null
                         return (
                           <div key={ti} className="rounded-lg border bg-white p-3">

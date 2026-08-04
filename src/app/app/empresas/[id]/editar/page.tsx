@@ -184,7 +184,7 @@ export default function EditarClientePage({ params }: { params: Promise<{ id: st
       setZipCode(data.zipCode || '')
       setResponsibleId(data.responsibleId || '')
       setNotes(data.notes || '')
-      setSelectedTags(data.tagsList?.map((t: TagItem) => t.id) || [])
+      setSelectedTags(data.tagsList?.map((t: TagItem) => String(t.id)) || [])
     } catch {
       toast.error('Cliente não encontrado')
       router.push('/app/empresas')
@@ -440,10 +440,10 @@ export default function EditarClientePage({ params }: { params: Promise<{ id: st
               <Label>Tags</Label>
               <div className="flex flex-wrap gap-1.5 rounded-md border p-2 min-h-[42px]">
                 {selectedTags.map(tagId => {
-                  const tag = tags.find(t => t.id === tagId)
+                  const tag = tags.find(t => String(t.id) === tagId)
                   if (!tag) return null
                   return (
-                    <Badge key={tag.id} variant="secondary" className="cursor-pointer gap-1" onClick={() => toggleTag(tag.id)}>
+                    <Badge key={tag.id} variant="secondary" className="cursor-pointer gap-1" onClick={() => toggleTag(String(tag.id))}>
                       {tag.name}
                       <X className="h-3 w-3" />
                     </Badge>
@@ -453,13 +453,13 @@ export default function EditarClientePage({ params }: { params: Promise<{ id: st
                   <span className="text-sm text-muted-foreground">Nenhuma tag selecionada</span>
                 )}
               </div>
-              {tags.filter(t => !selectedTags.includes(t.id)).length > 0 && (
+              {tags.filter(t => !selectedTags.includes(String(t.id))).length > 0 && (
                 <Select onValueChange={v => toggleTag(v)}>
                   <SelectTrigger className="h-8">
                     <SelectValue placeholder="+ Adicionar tag" />
                   </SelectTrigger>
                   <SelectContent>
-                    {tags.filter(t => !selectedTags.includes(t.id)).map(t => (
+                    {tags.filter(t => !selectedTags.includes(String(t.id))).map(t => (
                       <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
                     ))}
                   </SelectContent>
